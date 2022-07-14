@@ -12,6 +12,7 @@ import {
     setAndGet,
     isArray,
     last,
+    at,
 } from "./utils";
 import { isIterationStatement } from "typescript";
 import Streamable from "./Streamable";
@@ -202,6 +203,36 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
         }) as any;
     }
 
+    public undefined(): Stream<T extends undefined ? undefined : never> {
+        const self = this;
+        return Stream.iter(function* () {
+            for (const value of self) if (value === undefined) yield value;
+        }) as any;
+    }
+
+    public null(): Stream<T extends null ? null : never> {
+        const self = this;
+        return Stream.iter(function* () {
+            for (const value of self) if (value === undefined) yield value;
+        }) as any;
+    }
+
+    public nullableObjects(): Stream<T extends object | null ? T : never> {
+        const self = this;
+        return Stream.iter(function* () {
+            for (const value of self)
+                if (typeof value === "object") yield value;
+        }) as any;
+    }
+
+    public objects(): Stream<T extends object ? T : never> {
+        const self = this;
+        return Stream.iter(function* () {
+            for (const value of self)
+                if (typeof value === "object" && value !== null) yield value;
+        }) as any;
+    }
+
     public toArray(): T[] {
         return [...this];
     }
@@ -296,7 +327,7 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
 
     public some(
         test: (value: T, index: number, stream: this) => boolean = () => true
-    ) {
+    ): boolean {
         let index = 0;
         for (const value of this) if (test(value, index++, this)) return true;
         return false;
@@ -304,11 +335,13 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
 
     public none(
         test: (value: T, index: number, stream: this) => boolean = () => true
-    ) {
+    ): boolean {
         return !this.some(test);
     }
 
-    public every(test: (value: T, index: number, stream: this) => boolean) {
+    public every(
+        test: (value: T, index: number, stream: this) => boolean
+    ): boolean {
         let index = 0;
         for (const value of this) if (!test(value, index++, this)) return false;
         return true;
@@ -318,9 +351,7 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
         return join(this, separator);
     }
 
-    public flat(): T extends Iterable<infer subT>
-        ? Stream<T | subT>
-        : Stream<unknown> {
+    public flatten(): Stream<T extends Iterable<infer subT> ? subT : unknown> {
         const self = this;
         return Stream.iter(function* () {
             for (const value of self) {
@@ -346,5 +377,9 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
 
     public last(): T | undefined {
         return last(this.getSource());
+    }
+
+    public at(index: number | bigint) {
+        return at(this.getSource(), index);
     }
 }

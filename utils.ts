@@ -128,12 +128,39 @@ export function setAndGet<K, MV, V extends MV>(
 }
 
 export function last<T>(collection: Iterable<T>) {
-    if (isArray(collection)){
+    if (isArray(collection)) {
         if (collection.length > 0) return collection[collection.length - 1];
         return undefined;
     }
 
-    let last:T | undefined = undefined;
-    for(const value of collection) last = value;
+    let last: T | undefined = undefined;
+    for (const value of collection) last = value;
     return last;
 }
+
+export function at<T>(
+    collection: Iterable<T>,
+    index: number | bigint
+): T | undefined {
+    if (isArray(collection)) {
+        const usableIndex = Math.trunc(Number(index));
+        if (usableIndex < 0) return collection[collection.length + usableIndex];
+        return collection[usableIndex];
+    } else {
+        const usableIndex = BigInt(index);
+        if (usableIndex < 0) return at(reverse(collection), -usableIndex);
+
+        let i = 0n;
+        for (const value of collection) if (i++ === usableIndex) return value;
+    }
+}
+
+export function reverse<T>(collection: Iterable<T>): Iterable<T> {
+    return iter(function* () {
+        const array = asArray(collection);
+        for (let i = array.length - 1; i >= 0; i--) yield array[i];
+    });
+}
+
+type lessOne<T extends number> = [-1, 0,1,2,3,4,5,6,7,8,9][T];
+type t3 = lessOne<90>;
