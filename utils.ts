@@ -117,3 +117,23 @@ export function numberComparator(a: number, b: number): number {
 export function bigintComparator(a: bigint, b: bigint): number {
     return Number(a - b);
 }
+
+export function setAndGet<K, MV, V extends MV>(
+    map: Map<K, MV>,
+    key: K,
+    value: V & MV
+): V {
+    map.set(key, value);
+    return value;
+}
+
+export function last<T>(collection: Iterable<T>) {
+    if (isArray(collection)){
+        if (collection.length > 0) return collection[collection.length - 1];
+        return undefined;
+    }
+
+    let last:T | undefined = undefined;
+    for(const value of collection) last = value;
+    return last;
+}

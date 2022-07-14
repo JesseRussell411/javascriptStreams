@@ -9,9 +9,33 @@ import {
     isIterable,
     breakSignal,
     numberComparator,
+    setAndGet,
+    isArray,
+    last,
 } from "./utils";
 import { isIterationStatement } from "typescript";
 import Streamable from "./Streamable";
+
+export class StreamableArray<T> extends Array<T> implements Streamable<T> {
+    public stream(): Stream<T> {
+        return Stream.of(this);
+    }
+}
+
+export class StreamableSet<T> extends Set<T> implements Streamable<T> {
+    public stream(): Stream<T> {
+        return Stream.of(this);
+    }
+}
+
+export class StreamableMap<K, V>
+    extends Map<K, V>
+    implements Streamable<[K, V]>
+{
+    public stream(): Stream<[K, V]> {
+        return Stream.of(this);
+    }
+}
 
 export default class Stream<T> implements Iterable<T>, Streamable<T> {
     private getSource: () => Iterable<T>;
@@ -20,8 +44,8 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
         this.getSource = getSource;
     }
 
-    public static of<T>(source: Iterable<T>) {
-        return new Stream(() => source);
+    public static of<T>(source?: Iterable<T>) {
+        return new Stream(() => source ?? []);
     }
 
     public static from<T>(sourceGetter: () => Iterable<T>) {
@@ -70,13 +94,18 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
 
     public groupBy<K>(
         keySelector: (value: T, index: number, stream: this) => K
-    ): Stream<[K, T]> {
+    ): Stream<[K, Streamable<T> & T[]]> {
         return Stream.from(() => {
-            const groups = new Map<K, T>();
+            const groups = new Map<K, StreamableArray<T>>();
             let index = 0;
-            for (const value of this)
-                groups.set(keySelector(value, index++, this), value);
-            return groups;
+            for (const value of this) {
+                const key = keySelector(value, index++, this);
+                const group =
+                    groups.get(key) ??
+                    setAndGet(groups, key, new StreamableArray());
+                group.push(value);
+            }
+            return Stream.of(groups);
         });
     }
 
@@ -294,5 +323,14 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
         let index = 0;
         for (const value of this) if (test(value, index++, this)) return value;
         return undefined;
+    }
+
+    public first(): T | undefined{
+        for(const value of this) return value;
+        return undefined;
+    }
+
+    public last(): T | undefined{
+        return last(this.getSource());
     }
 }
