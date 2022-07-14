@@ -36,3 +36,6 @@ console.log(isArray(sa));
 if (isArray(sa)) {
     console.log("sa is an array");
 }
+
+
+const ssss = Stream.of([1,2,undefined,4, undefined, 5, 6, 7, 8, undefined, null]).defined().nonNull().nonNull().defined().toArray();

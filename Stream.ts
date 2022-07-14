@@ -188,6 +188,20 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
         });
     }
 
+    public defined(): Stream<T extends undefined ? never : T> {
+        const self = this;
+        return Stream.iter(function* () {
+            for (const value of self) if (value !== undefined) yield value;
+        }) as any;
+    }
+
+    public nonNull(): Stream<T extends null ? never : T> {
+        const self = this;
+        return Stream.iter(function* () {
+            for (const value of self) if (value !== null) yield value;
+        }) as any;
+    }
+
     public toArray(): T[] {
         return [...this];
     }
@@ -325,12 +339,12 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
         return undefined;
     }
 
-    public first(): T | undefined{
-        for(const value of this) return value;
+    public first(): T | undefined {
+        for (const value of this) return value;
         return undefined;
     }
 
-    public last(): T | undefined{
+    public last(): T | undefined {
         return last(this.getSource());
     }
 }
