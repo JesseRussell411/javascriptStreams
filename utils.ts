@@ -109,3 +109,11 @@ export function forEach<T>(
         if (callback(value, index++) === breakSignal) break;
     }
 }
+
+export function numberComparator(a: number, b: number): number {
+    return a - b;
+}
+
+export function bigintComparator(a: bigint, b: bigint): number {
+    return Number(a - b);
+}

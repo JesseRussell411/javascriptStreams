@@ -8,8 +8,8 @@ import {
     join,
     isIterable,
     breakSignal,
+    numberComparator,
 } from "./utils";
-import { bigIntAbs } from "./betterNumbers";
 import { isIterationStatement } from "typescript";
 import Streamable from "./Streamable";
 
@@ -141,6 +141,21 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
         return Stream.iter(function* () {
             for (const value of other) yield value;
             for (const value of self) yield value;
+        });
+    }
+
+    public distinct(
+        identifier: (value: T) => any = (value) => value
+    ): Stream<T> {
+        const self = this;
+        return Stream.iter(function* () {
+            const returned = new Set<any>();
+            for (const value of self) {
+                const id = identifier(value);
+                if (returned.has(id)) continue;
+                yield value;
+                returned.add(id);
+            }
         });
     }
 
