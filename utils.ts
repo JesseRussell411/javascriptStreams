@@ -61,7 +61,9 @@ export function isSet<T>(collection: Iterable<T>): collection is Set<T> {
     return collection instanceof Set;
 }
 
-export function isMap<K, V>(collection: Iterable<EntryLike<K, V>>): collection is Map<K, V>{
+export function isMap<K, V>(
+    collection: Iterable<EntryLike<K, V>>
+): collection is Map<K, V> {
     return collection instanceof Map;
 }
 
@@ -234,6 +236,8 @@ export function smartCompare(
     b: any,
     options: SmartCompareOptions = {}
 ): number {
+    if (a === undefined) return 0;
+    if (b === undefined) return 0;
     const typeRatingA = rateType(a);
     const typeRatingB = rateType(b);
     if (typeRatingA !== typeRatingB) return typeRatingA - typeRatingB;
@@ -268,6 +272,30 @@ export function smartCompare(
         return options.compareObjects(a, b);
 
     return `${a}`.localeCompare(`${b}`);
+}
+
+export type Comparator<T> = (a: T, b: T) => number;
+export type Order<T> = ((value: T) => any) | Comparator<T>
+
+function orderIsPropertyGetter<T>(order: Order<T>): order is (value: T) => any {
+    return order.length === 1;
+}
+
+function orderIsComparator<T>(order: Order<T>): order is Comparator<T> {
+    return !orderIsPropertyGetter(order);
+}
+
+export function multiCompare<T>(a: T, b: T, orders: Iterable<Order<T>>) {
+    for (const order of orders) {
+        let comp: number;
+        if (orderIsComparator(order)) {
+            return order(a, b);
+        } else {
+            comp = smartCompare(order(a), order(b));
+        }
+        if (comp !== 0) return comp;
+    }
+    return 0;
 }
 
 export function merge<A, B>(a: Iterable<A>, b: Iterable<B>): Iterable<A | B> {
@@ -384,4 +412,11 @@ export function toMap<T, K, V>(
     }
 
     return map;
+}
+
+export function append<T>(collection: Iterable<T>, value: T) {
+    return iter(function* () {
+        for (const value of collection) yield value;
+        yield value;
+    });
 }

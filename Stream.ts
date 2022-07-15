@@ -1,4 +1,4 @@
-import { and } from "./logic";
+import { and, or } from "./logic";
 import { Streamable, StreamableArray, StreamableTuple } from "./streamable";
 import {
     lazy,
@@ -27,6 +27,10 @@ import {
     toMap,
     isSet,
     isMap,
+    multiCompare,
+    Comparator,
+    append,
+    Order,
 } from "./utils";
 
 function isSolid(collection: Iterable<any>): boolean {
@@ -40,16 +44,16 @@ function isSolid(collection: Iterable<any>): boolean {
 export default class Stream<T> implements Iterable<T>, Streamable<T> {
     private getSource: () => Iterable<T>;
 
-    private constructor(getSource: () => Iterable<T>) {
+    protected constructor(getSource: () => Iterable<T>) {
         this.getSource = getSource;
     }
 
-    /** @returns An empty stream. */
-    public static of<T>(): Stream<T>;
-    /** @returns A Stream of the collection. */
-    public static of<T>(collection: Iterable<T>): Stream<T>;
-    public static of<T>(source?: Iterable<T>) {
-        return new Stream(() => source ?? []);
+    public static empty<T>() {
+        return new Stream(() => []);
+    }
+
+    public static of<T>(source: Iterable<T>) {
+        return new Stream(() => source);
     }
 
     /** @returns A Stream of the collection from the given function. */
@@ -109,6 +113,17 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
         });
     }
 
+    public repeat(times: number | bigint): Stream<T> {
+        const usableTimes = BigInt(times);
+        if (usableTimes < 0n) return this.reverse().repeat(-usableTimes);
+
+        const self = this;
+        return Stream.iter(function* () {
+            for (let i = 0n; i < usableTimes; i++)
+                for (const value of self) yield value;
+        });
+    }
+
     /**
      * Groups the values in the Stream by the given key selector.
      * @param keySelector Specifies group to put each value in by the key it returns.
@@ -130,7 +145,7 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
 
                 group.push(value);
             }
-            
+
             return groups;
         });
     }
@@ -148,30 +163,26 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
         });
     }
 
-    public orderBy(
-        getProperty: (value: T) => any,
-        options: SmartCompareOptions = {}
-    ): Stream<T> {
-        return this.sort((a, b) =>
-            smartCompare(getProperty(a), getProperty(b), options)
-        );
+    public orderBy(comparator: Comparator<T>): OrderedStream<T>;
+    public orderBy(parameter: (value: T) => any): OrderedStream<T>;
+    public orderBy(order: Order<T>): OrderedStream<T> {
+        return OrderedStream.of(this, [order]);
     }
 
+    public orderByDescending(comparator: Comparator<T>): OrderedStream<T>;
     public orderByDescending(
-        getProperty: (value: T) => any,
-        options: SmartCompareOptions = {}
-    ): Stream<T> {
-        return this.sort((a, b) =>
-            smartCompare(getProperty(b), getProperty(a), options)
-        );
+        parameter: (value: T) => any
+    ): OrderedStream<T>;
+    public orderByDescending(order: Order<T>): OrderedStream<T> {
+        return OrderedStream.of(this, [order], true);
     }
 
-    public order(options: SmartCompareOptions = {}): Stream<T> {
-        return this.sort((a, b) => smartCompare(a, b, options));
+    public order(): OrderedStream<T> {
+        return this.orderBy(value => value);
     }
 
-    public orderDescending(options: SmartCompareOptions = {}): Stream<T> {
-        return this.sort((a, b) => smartCompare(b, a, options));
+    public orderDescending(): OrderedStream<T> {
+        return this.orderByDescending(value => value);
     }
 
     /**
@@ -650,5 +661,73 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
 
     public count(): number {
         return count(this.getSource());
+    }
+}
+
+export class OrderedStream<T> extends Stream<T> {
+    private orderedBy: Comparator<T>[];
+    private descending: boolean;
+
+    private constructor(
+        getSource: () => Iterable<T>,
+        orderedBy: Iterable<Order<T>>,
+        descending: boolean
+    ) {
+        super(() => {
+            const source = [...getSource()];
+            source.sort(
+                this.descending
+                    ? (a, b) => multiCompare(b, a, this.orderedBy)
+                    : (a, b) => multiCompare(a, b, this.orderedBy)
+            );
+            return source;
+        });
+        this.descending = descending;
+        this.orderedBy = [...orderedBy];
+    }
+
+    public static empty<T>(
+        orderedBy: Iterable<Order<T>> = [],
+        descending: boolean = false
+    ) {
+        return new OrderedStream(() => [], orderedBy, descending);
+    }
+
+    public static of<T>(
+        source: Iterable<T>,
+        orderedBy: Iterable<Order<T>> = [],
+        descending: boolean = false
+    ): OrderedStream<T> {
+        return new OrderedStream(() => source ?? [], orderedBy, descending);
+    }
+
+    public static from<T>(
+        sourceGetter: () => Iterable<T>,
+        orderedBy: Iterable<Order<T>> = [],
+        descending: boolean = false
+    ): OrderedStream<T> {
+        return new OrderedStream(sourceGetter, orderedBy, descending);
+    }
+
+    public static iter<T>(
+        generatorGetter: () => Generator<T>,
+        orderedBy: Iterable<Order<T>> = [],
+        descending: boolean = false
+    ): OrderedStream<T> {
+        return new OrderedStream(
+            () => generatorGetter(),
+            orderedBy,
+            descending
+        );
+    }
+
+    public thenBy(comparator: Comparator<T>): OrderedStream<T>;
+    public thenBy(parameter: (value: T) => any): OrderedStream<T>;
+    public thenBy(order: Order<T>): OrderedStream<T> {
+        return OrderedStream.of(
+            this,
+            append(this.orderedBy, order),
+            this.descending
+        );
     }
 }

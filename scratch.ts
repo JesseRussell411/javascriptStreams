@@ -80,14 +80,14 @@ async function main() {
         undefined,
     ]).undefined();
 
-    const pppp = Stream.of<Stream<Stream<Set<"steve">[][]>>>()
+    const pppp = Stream.empty<Stream<Stream<Set<"steve">[][]>>>()
         .flat()
         .flat()
         .flat()
         .flat()
         .flat();
 
-    Stream.of<number | undefined>().undefined().count();
+    Stream.empty<number | undefined>().undefined().count();
 
     const fs = Stream.of([() => 2, 4, () => 7, true, () => false]).functions();
 
@@ -144,18 +144,18 @@ async function main() {
             true,
             10,
             12,
+            { name: "james", widgetCount: 0, id: 9 },
             20n,
             true,
-            { foo: "bar", id: 1, widgetCount: 6 },
-            { foo: "fing", id: 3, widgetCount: 1 },
             { name: "todd", id: 7, widgetCount: 1 },
-            { name: "james", widgetCount: 0, id: 9 },
             -20n,
+            { foo: "fing", id: 3, widgetCount: 1 },
             false,
             ["steve", "foo", "bar"],
             3n,
             -8n,
             1n,
+            { foo: "bar", id: 1, widgetCount: 6 },
             342,
             true,
             342,
@@ -163,10 +163,12 @@ async function main() {
             null,
             undefined,
         ])
-            .order({
-                compareObjects: (a, b) => a?.widgetCount - b?.widgetCount,
-                compareArrays: (a, b) => a.length - b.length,
-            })
+            .order()
+            .toArray()
+    );
+    console.log(
+        Stream.of([[1, 2, 3], [1, 2], [1], [1, 2, 3, 4]])
+            .orderBy(v => v.length)
             .toArray()
     );
 
@@ -180,8 +182,20 @@ async function main() {
                 g[0],
                 g[1]
                     .stream()
-                    .orderBy(c => c.first_name)
-                    .map(c => c.first_name + " lives in " + c.state)
+                    .orderBy(c => c.city)
+                    .thenBy((a, b) => a.id - b.id)
+                    .repeat(-1)
+                    .reverse()
+                    .map(c =>
+                        [
+                            c.city,
+                            c.company_name,
+                            c.id,
+                            c.first_name,
+                            c.last_name,
+                            c.bad_text,
+                        ].join(" | ")
+                    )
                     .toArray(),
             ])
             .toArray()
