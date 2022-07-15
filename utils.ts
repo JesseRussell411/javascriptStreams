@@ -1,3 +1,5 @@
+import { and } from "./logic";
+
 export function lazy<T>(getter: () => T): () => T {
     let lazyGetter = () => {
         let output: T;
@@ -86,7 +88,7 @@ export function join(
     separator: string = ""
 ): string {
     if (isArray(collection)) return collection.join(separator);
-    
+
     const result: string[] = [];
     const iterator = collection[Symbol.iterator]();
     let next = iterator.next();
@@ -175,3 +177,38 @@ export function count(collection: Iterable<any>): number {
     return size;
 }
 export type ValueOf<T> = T[keyof T];
+
+export function smartCompare(a: any, b: any): number {
+    if (typeof a === "string") return a.localeCompare(`${b}`);
+    if (typeof b === "string") return `${a}`.localeCompare(b);
+    if (typeof a === "number" && typeof b === "number") return a - b;
+    if (typeof a === "bigint" && typeof b === "bigint") return Number(a - b);
+    if (typeof a === "number" && typeof b === "bigint") return a - Number(b);
+    if (typeof a === "bigint" && typeof b === "number") return Number(a) - b;
+
+    return `${a}`.localeCompare(`${b}`);
+}
+
+export function merge<A, B>(a: Iterable<A>, b: Iterable<B>): Iterable<A | B> {
+    return iter(function* () {
+        const iterA = a[Symbol.iterator]();
+        const iterB = b[Symbol.iterator]();
+        let nextA;
+        let nextB;
+
+        while (and(!(nextA = iterA.next()), !(nextB = iterB.next()))) {
+            yield nextA.value as A;
+            yield nextB.value as B;
+        }
+
+        if (nextA?.done === false) {
+            do {
+                yield nextA.value as A;
+            } while (!(nextA = iterA.next()).done);
+        } else if (nextB?.done === false) {
+            do {
+                yield nextB.value as B;
+            } while (!(nextB = iterB.next()).done);
+        }
+    });
+}

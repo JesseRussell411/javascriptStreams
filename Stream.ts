@@ -1,3 +1,4 @@
+import { and } from "./logic";
 import { Streamable, StreamableArray, StreamableTuple } from "./streamable";
 import {
     lazy,
@@ -15,6 +16,8 @@ import {
     last,
     at,
     count,
+    smartCompare,
+    merge,
 } from "./utils";
 
 export default class Stream<T> implements Iterable<T>, Streamable<T> {
@@ -115,7 +118,7 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
     }
 
     /**
-     * Am out-of-place sort of the values in the Stream bases on the given comparator. Like {@link Array.sort}.
+     * An out-of-place sort of the values in the Stream bases on the given comparator. Like {@link Array.sort}.
      * @returns A Stream of the original Streams values sorted by the comparator.
      * @params comparator How to sort the values. If ommited, the values are sorted in ascending, ASCII order.
      */
@@ -125,6 +128,18 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
             sorted.sort(comparator);
             return sorted;
         });
+    }
+
+    public orderBy(getProperty: (value: T) => any): Stream<T> {
+        return this.sort((a, b) =>
+            smartCompare(getProperty(a), getProperty(b))
+        );
+    }
+
+    public orderByDescending(getProperty: (value: T) => any): Stream<T> {
+        return this.sort((a, b) =>
+            smartCompare(getProperty(b), getProperty(a))
+        );
     }
 
     /**
@@ -205,6 +220,47 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
                 returned.add(id);
             }
         });
+    }
+
+    public alternate(interval: number | bigint): Stream<T> {
+        const usableInterval = BigInt(interval);
+
+        const self = this;
+        return Stream.iter(function* () {
+            let i = 1;
+            for (const value of self) {
+                if (i++ >= usableInterval) {
+                    i = 1;
+                    yield value;
+                }
+            }
+        });
+    }
+
+    public with(needed: Iterable<T>): Stream<T> {
+        const self = this;
+        return Stream.iter(function* () {
+            const remainingNeeded = new Set(needed);
+            for (const value of self) {
+                remainingNeeded.delete(value);
+                yield value;
+            }
+
+            for (const value of remainingNeeded) yield value;
+        });
+    }
+
+    public without(remove: Iterable<T>): Stream<T> {
+        const self = this;
+        return Stream.iter(function* () {
+            const setToRemove = asSet(remove);
+
+            for (const value of self) if (!setToRemove.has(value)) yield value;
+        });
+    }
+
+    public merge<O>(other: Iterable<O>): Stream<T | O> {
+        return Stream.of(merge(this, other));
     }
 
     branch(): StreamableTuple<[]>;

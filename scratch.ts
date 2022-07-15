@@ -107,9 +107,9 @@ async function main() {
     );
 
     const testData = await testDataPromise;
-    const customers = Stream.of(testData)
-        .filter((c) => c.state === "MT")
-        .toArray();
-    console.log(customers);
+    const customers = Stream.of(testData).orderBy((c) => c.last_name)
+    .groupBy(c => c.city)
+
+    customers.forEach((c) => console.log(c));
 }
 main().catch((e) => console.error(e));

@@ -16,8 +16,6 @@ export const testDataPromise: Promise<
         bad_text: string;
     }[]
 > = (async () => {
-    console.log("getting data")
     const data = await fs.readFile("testData.json");
-    console.log("=======data:",data);
     return JSON.parse(data.toString());
 })();
