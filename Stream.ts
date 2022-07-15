@@ -18,7 +18,24 @@ import {
     count,
     smartCompare,
     merge,
+    DeLiterall,
+    SmartCompareOptions,
+    EntryLike,
+    EntryLikeValue,
+    EntryLikeKey,
+    asMap,
+    toMap,
+    isSet,
+    isMap,
 } from "./utils";
+
+function isSolid(collection: Iterable<any>): boolean {
+    return (
+        Array.isArray(collection) ||
+        collection instanceof Set ||
+        collection instanceof Map
+    );
+}
 
 export default class Stream<T> implements Iterable<T>, Streamable<T> {
     private getSource: () => Iterable<T>;
@@ -99,7 +116,7 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
      */
     public groupBy<K>(
         keySelector: (value: T, index: number, stream: this) => K
-    ): Stream<[K, Streamable<T> & T[]]> {
+    ): Stream<[K, StreamableArray<T>]> {
         return Stream.from(() => {
             const groups = new Map<K, StreamableArray<T>>();
 
@@ -113,6 +130,7 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
 
                 group.push(value);
             }
+            
             return groups;
         });
     }
@@ -130,16 +148,30 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
         });
     }
 
-    public orderBy(getProperty: (value: T) => any): Stream<T> {
+    public orderBy(
+        getProperty: (value: T) => any,
+        options: SmartCompareOptions = {}
+    ): Stream<T> {
         return this.sort((a, b) =>
-            smartCompare(getProperty(a), getProperty(b))
+            smartCompare(getProperty(a), getProperty(b), options)
         );
     }
 
-    public orderByDescending(getProperty: (value: T) => any): Stream<T> {
+    public orderByDescending(
+        getProperty: (value: T) => any,
+        options: SmartCompareOptions = {}
+    ): Stream<T> {
         return this.sort((a, b) =>
-            smartCompare(getProperty(b), getProperty(a))
+            smartCompare(getProperty(b), getProperty(a), options)
         );
+    }
+
+    public order(options: SmartCompareOptions = {}): Stream<T> {
+        return this.sort((a, b) => smartCompare(a, b, options));
+    }
+
+    public orderDescending(options: SmartCompareOptions = {}): Stream<T> {
+        return this.sort((a, b) => smartCompare(b, a, options));
     }
 
     /**
@@ -207,9 +239,7 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
         });
     }
 
-    public distinct(
-        identifier: (value: T) => any = (value) => value
-    ): Stream<T> {
+    public distinct(identifier: (value: T) => any = value => value): Stream<T> {
         const self = this;
         return Stream.iter(function* () {
             const returned = new Set<any>();
@@ -329,52 +359,50 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
     }
 
     public defined(): Stream<T extends undefined ? never : T> {
-        return this.filter((value) => value !== undefined) as any;
+        return this.filter(value => value !== undefined) as any;
     }
 
     public nonNull(): Stream<T extends null ? never : T> {
-        return this.filter((value) => value !== null) as any;
+        return this.filter(value => value !== null) as any;
     }
 
-    public undefined(): Stream<T extends undefined ? T : undefined> {
-        return this.filter((value) => value === undefined) as any;
+    public undefined(): Stream<T extends undefined ? T : never> {
+        return this.filter(value => value === undefined) as any;
     }
 
-    public null(): Stream<T extends null ? T : null> {
-        return this.filter((value) => value === null) as any;
+    public null(): Stream<T extends null ? T : never> {
+        return this.filter(value => value === null) as any;
     }
 
-    public nullableObjects(): Stream<
-        T extends object | null ? T : object | null
-    > {
-        return this.filter((value) => typeof value === "object") as any;
+    public nullableObjects(): Stream<T extends object | null ? T : never> {
+        return this.filter(value => typeof value === "object") as any;
     }
 
-    public objects(): Stream<T extends object ? T : object> {
+    public objects(): Stream<T extends object ? T : never> {
         return this.filter(
-            (value) => value !== null && typeof value === "object"
+            value => value !== null && typeof value === "object"
         ) as any;
     }
 
-    public numbers(): Stream<T extends number ? T : number> {
-        return this.filter((value) => typeof value === "bigint") as any;
+    public numbers(): Stream<T extends number ? T : never> {
+        return this.filter(value => typeof value === "bigint") as any;
     }
 
-    public bigints(): Stream<T extends bigint ? T : bigint> {
-        return this.filter((value) => typeof value === "bigint") as any;
+    public bigints(): Stream<T extends bigint ? T : never> {
+        return this.filter(value => typeof value === "bigint") as any;
     }
 
-    public strings(): Stream<T extends string ? T : string> {
-        return this.filter((value) => typeof value === "string") as any;
+    public strings(): Stream<T extends string ? T : never> {
+        return this.filter(value => typeof value === "string") as any;
     }
 
-    public booleans(): Stream<T extends boolean ? T : boolean> {
-        return this.filter((value) => typeof value === "boolean") as any;
+    public booleans(): Stream<T extends boolean ? T : never> {
+        return this.filter(value => typeof value === "boolean") as any;
     }
 
-    public functions(): Stream<T extends Function ? T : Function> {
+    public functions(): Stream<T extends Function ? T : never> {
         return this.filter(
-            (value) => typeof value === "function" || value instanceof Function
+            value => typeof value === "function" || value instanceof Function
         ) as any;
     }
 
@@ -387,7 +415,11 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
     }
 
     public stream(): Stream<T> {
-        return Stream.of(this.asArray());
+        const source = this.getSource();
+
+        if (isSolid(source)) return Stream.of(source);
+
+        return Stream.of(this.toArray());
     }
 
     public asArray(): readonly T[] {
@@ -398,23 +430,90 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
         return asSet(this.getSource());
     }
 
-    public toMap<K, V>(
-        keySelector: (value: T, index: number, stream: this) => K,
-        valueSelector: (value: T, index: number, stream: this) => V
-    ): Map<K, V> {
-        const map = new Map<K, V>();
+    // public toMap<K, V>(
+    //     keySelector: (value: T, index: number, stream: this) => K,
+    //     valueSelector: (value: T, index: number, stream: this) => V
+    // ): Map<K, V> {
+    //     const map = new Map<K, V>();
 
-        let index = 0;
-        for (const value of this) {
-            map.set(
-                keySelector(value, index, this),
-                valueSelector(value, index, this)
-            );
-            index++;
-        }
+    //     let index = 0;
+    //     for (const value of this) {
+    //         map.set(
+    //             keySelector(value, index, this),
+    //             valueSelector(value, index, this)
+    //         );
+    //         index++;
+    //     }
 
-        return map;
+    //     return map;
+    // }
+
+    public asMap(): T extends EntryLike<infer K, infer V>
+        ? ReadonlyMap<K, V>
+        : never;
+
+    public asMap<K>(
+        keySelector: (value: T, index: number) => K
+    ): T extends EntryLikeValue<infer V> ? ReadonlyMap<K, V> : never;
+
+    public asMap<V>(
+        keySelector: undefined,
+        valueSelector: (value: T, index: number) => V
+    ): T extends EntryLikeKey<infer K> ? ReadonlyMap<K, V> : never;
+
+    public asMap<K, V>(
+        keySelector: (value: T, index: number) => K,
+        valueSelector: (value: T, index: number) => V
+    ): ReadonlyMap<K, V>;
+
+    public asMap<K, V>(
+        keySelector?: (value: T, index: number) => K,
+        valueSelector?: (value: T, index: number) => V
+    ): ReadonlyMap<K, V> {
+        return asMap(
+            this.getSource(),
+            keySelector as any,
+            valueSelector as any
+        );
     }
+
+    public toMap(): T extends EntryLike<infer K, infer V>
+        ? ReadonlyMap<K, V>
+        : never;
+
+    public toMap<K>(
+        keySelector: (value: T, index: number) => K
+    ): T extends EntryLikeValue<infer V> ? ReadonlyMap<K, V> : never;
+
+    public toMap<V>(
+        keySelector: undefined,
+        valueSelector: (value: T, index: number) => V
+    ): T extends EntryLikeKey<infer K> ? ReadonlyMap<K, V> : never;
+
+    public toMap<K, V>(
+        keySelector: (value: T, index: number) => K,
+        valueSelector: (value: T, index: number) => V
+    ): ReadonlyMap<K, V>;
+
+    public toMap<K, V>(
+        keySelector?: (value: T, index: number) => K,
+        valueSelector?: (value: T, index: number) => V
+    ): ReadonlyMap<K, V> {
+        return toMap(
+            this.getSource(),
+            keySelector as any,
+            valueSelector as any
+        );
+    }
+
+    public reduce(
+        reduction: (
+            previousResult: DeLiterall<T>,
+            current: T,
+            index: number,
+            stream: this
+        ) => DeLiterall<T>
+    ): DeLiterall<T> | undefined;
 
     public reduce<R>(
         reduction: (
@@ -425,15 +524,6 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
         ) => R,
         initialValue: R
     ): R;
-
-    public reduce(
-        reduction: (
-            previousResult: T,
-            current: T,
-            index: number,
-            stream: this
-        ) => T
-    ): T | undefined;
 
     public reduce(
         reduction: (
@@ -542,7 +632,7 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
     }
 
     public indexOf(value: T): number | undefined {
-        return this.findIndex((streamValue) => Object.is(value, streamValue));
+        return this.findIndex(streamValue => Object.is(value, streamValue));
     }
 
     public first(): T | undefined {

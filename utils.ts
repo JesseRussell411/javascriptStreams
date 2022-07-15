@@ -1,3 +1,5 @@
+import Stream from "./Stream";
+import { testDataPromise } from "./getTestData";
 import { and } from "./logic";
 
 export function lazy<T>(getter: () => T): () => T {
@@ -57,6 +59,10 @@ export function isArray<T>(collection: Iterable<T>): collection is T[] {
 
 export function isSet<T>(collection: Iterable<T>): collection is Set<T> {
     return collection instanceof Set;
+}
+
+export function isMap<K, V>(collection: Iterable<EntryLike<K, V>>): collection is Map<K, V>{
+    return collection instanceof Map;
 }
 
 export function asArray<T>(collection: Iterable<T>): readonly T[] {
@@ -178,13 +184,88 @@ export function count(collection: Iterable<any>): number {
 }
 export type ValueOf<T> = T[keyof T];
 
-export function smartCompare(a: any, b: any): number {
+export function asNumber(
+    value: boolean | number | bigint | null | undefined
+): number {
+    if (typeof value === "boolean") return value ? 1 : 0;
+    if (value == null) return 0;
+    return Number(value);
+}
+
+function rateType(value: any) {
+    if (value === null) return 8;
+    if (Array.isArray(value)) return 2;
+
+    switch (typeof value) {
+        case "function":
+            return 1;
+
+        //case of array - 2
+
+        case "object":
+            return 3;
+        case "symbol":
+            return 4;
+        case "boolean":
+            return 5;
+        case "number":
+            return 6;
+        case "bigint":
+            return 6;
+        case "string":
+            return 7;
+
+        //case of null - 8
+    }
+    return -1;
+}
+
+export type ObjectKey = number | string | symbol;
+export interface SmartCompareOptions {
+    compareObjects?: (
+        a: Record<ObjectKey, any>,
+        b: Record<ObjectKey, any>
+    ) => number;
+    compareArrays?: (a: any[], b: any[]) => number;
+}
+
+export function smartCompare(
+    a: any,
+    b: any,
+    options: SmartCompareOptions = {}
+): number {
+    const typeRatingA = rateType(a);
+    const typeRatingB = rateType(b);
+    if (typeRatingA !== typeRatingB) return typeRatingA - typeRatingB;
+
     if (typeof a === "string") return a.localeCompare(`${b}`);
     if (typeof b === "string") return `${a}`.localeCompare(b);
-    if (typeof a === "number" && typeof b === "number") return a - b;
+
     if (typeof a === "bigint" && typeof b === "bigint") return Number(a - b);
-    if (typeof a === "number" && typeof b === "bigint") return a - Number(b);
-    if (typeof a === "bigint" && typeof b === "number") return Number(a) - b;
+
+    if (
+        (typeof a === "number" ||
+            typeof a === "bigint" ||
+            typeof a === "boolean" ||
+            a == null) &&
+        (typeof b === "number" ||
+            typeof b === "bigint" ||
+            typeof b === "boolean" ||
+            b == null)
+    )
+        return asNumber(a) - asNumber(b);
+
+    if (options.compareArrays !== undefined && isArray(a) && isArray(b))
+        return options.compareArrays(a, b);
+
+    if (
+        options.compareObjects !== undefined &&
+        typeof a === "object" &&
+        a !== null &&
+        typeof b === "object" &&
+        b !== null
+    )
+        return options.compareObjects(a, b);
 
     return `${a}`.localeCompare(`${b}`);
 }
@@ -211,4 +292,96 @@ export function merge<A, B>(a: Iterable<A>, b: Iterable<B>): Iterable<A | B> {
             } while (!(nextB = iterB.next()).done);
         }
     });
+}
+
+// about literal types https://www.typescriptlang.org/docs/handbook/2/everyday-types.html#literal-types
+export type DeLiterall<T> = T extends number
+    ? number
+    : T extends string
+    ? string
+    : T extends boolean
+    ? boolean
+    : T;
+
+export type EntryLike<K, V> =
+    | [K, V, ...any]
+    | { 0: K; 1: V; [key: ObjectKey]: any };
+export type EntryLikeKey<K> = [K, ...any] | { 0: K; [key: ObjectKey]: any };
+export type EntryLikeValue<V> =
+    | [any, V, ...any]
+    | { 1: V; [key: ObjectKey]: any };
+
+export function asMap<T extends EntryLike<K, V>, K, V>(
+    collection: Iterable<T>
+): ReadonlyMap<K, V>;
+
+export function asMap<T extends EntryLikeValue<V>, K, V>(
+    collection: Iterable<T>,
+    keySelector: (value: T, index: number) => K
+): ReadonlyMap<K, V>;
+
+export function asMap<T extends EntryLikeKey<K>, K, V>(
+    collection: Iterable<T>,
+    keySelector: undefined,
+    valueSelector: (value: T, index: number) => V
+): ReadonlyMap<K, V>;
+
+export function asMap<T, K, V>(
+    collection: Iterable<T>,
+    keySelector: (value: T, index: number) => K,
+    valueSelector: (value: T, index: number) => V
+): ReadonlyMap<K, V>;
+
+export function asMap<T, K, V>(
+    collection: Iterable<T>,
+    keySelector?: (value: T, index: number) => K,
+    valueSelector?: (value: T, index: number) => V
+): Map<K, V> {
+    if (
+        collection instanceof Map &&
+        keySelector === undefined &&
+        valueSelector === undefined
+    )
+        return collection;
+
+    return toMap(collection, keySelector as any, valueSelector as any);
+}
+
+export function toMap<T extends EntryLike<K, V>, K, V>(
+    collection: Iterable<T>
+): Map<K, V>;
+
+export function toMap<T extends EntryLikeValue<V>, K, V>(
+    collection: Iterable<T>,
+    keySelector: (value: T, index: number) => K
+): Map<K, V>;
+
+export function toMap<T extends EntryLikeKey<K>, K, V>(
+    collection: Iterable<T>,
+    keySelector: undefined,
+    valueSelector: (value: T, index: number) => V
+): Map<K, V>;
+
+export function toMap<T, K, V>(
+    collection: Iterable<T>,
+    keySelector: (value: T, index: number) => K,
+    valueSelector: (value: T, index: number) => V
+): Map<K, V>;
+
+export function toMap<T, K, V>(
+    collection: Iterable<T>,
+    keySelector?: (value: T, index: number) => K,
+    valueSelector?: (value: T, index: number) => V
+): Map<K, V> {
+    const map = new Map<K, V>();
+    const keyS = keySelector ?? (value => (value as any)?.[0]);
+    const valueS = valueSelector ?? (value => (value as any)?.[1]);
+
+    let index = 0;
+    for (const value of collection) {
+        map.set(keyS(value, index), valueS(value, index));
+        index++;
+    }
+
+    return map;
 }
