@@ -1,3 +1,4 @@
+import { Streamable, StreamableArray, StreamableTuple } from "./streamable";
 import {
     lazy,
     iter,
@@ -13,30 +14,8 @@ import {
     isArray,
     last,
     at,
+    count,
 } from "./utils";
-import { isIterationStatement } from "typescript";
-import Streamable from "./Streamable";
-
-export class StreamableArray<T> extends Array<T> implements Streamable<T> {
-    public stream(): Stream<T> {
-        return Stream.of(this);
-    }
-}
-
-export class StreamableSet<T> extends Set<T> implements Streamable<T> {
-    public stream(): Stream<T> {
-        return Stream.of(this);
-    }
-}
-
-export class StreamableMap<K, V>
-    extends Map<K, V>
-    implements Streamable<[K, V]>
-{
-    public stream(): Stream<[K, V]> {
-        return Stream.of(this);
-    }
-}
 
 export default class Stream<T> implements Iterable<T>, Streamable<T> {
     private getSource: () => Iterable<T>;
@@ -45,22 +24,34 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
         this.getSource = getSource;
     }
 
+    /** @returns An empty stream. */
+    public static of<T>(): Stream<T>;
+    /** @returns A Stream of the collection. */
+    public static of<T>(collection: Iterable<T>): Stream<T>;
     public static of<T>(source?: Iterable<T>) {
         return new Stream(() => source ?? []);
     }
 
+    /** @returns A Stream of the collection from the given function. */
     public static from<T>(sourceGetter: () => Iterable<T>) {
         return new Stream(sourceGetter);
     }
 
+    /** @returns A Stream of the generator from the given function. */
     public static iter<T>(generatorGetter: () => Generator<T>) {
         return new Stream(() => iter(generatorGetter));
     }
 
+    /** @returns An iterator over the Stream. */
     public [Symbol.iterator]() {
         return this.getSource()[Symbol.iterator]();
     }
 
+    /**
+     * Calls the callback on each value in the Stream. Like {@link Array.forEach}.
+     * @param callback What to call for each value. If {@link breakSignal} is returned, iteration is stopped.
+     * @returns The Stream.
+     */
     public forEach(
         callback: (value: T, index: number, stream: this) => Symbol | void
     ): this {
@@ -72,6 +63,7 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
         return this;
     }
 
+    /** @returns A Stream of the given mapping from the original Stream. Like {@link Array.map}. */
     public map<R>(
         mapping: (value: T, index: number, stream: this) => R
     ): Stream<R> {
@@ -82,6 +74,10 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
         });
     }
 
+    /**
+     * @returns A stream of the values that pass the filter. Like {@link Array.filter}.
+     * @param filter Whether the given value passes the filter. Return true to include the value in the returned Stream and false to not include it.
+     */
     public filter(
         filter: (value: T, index: number, stream: this) => boolean
     ): Stream<T> {
@@ -93,23 +89,36 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
         });
     }
 
+    /**
+     * Groups the values in the Stream by the given key selector.
+     * @param keySelector Specifies group to put each value in by the key it returns.
+     * @returns A Stream over the groups. Each value is an Array where the first item is the group's key and the second item is the groups values.
+     */
     public groupBy<K>(
         keySelector: (value: T, index: number, stream: this) => K
     ): Stream<[K, Streamable<T> & T[]]> {
         return Stream.from(() => {
             const groups = new Map<K, StreamableArray<T>>();
+
             let index = 0;
             for (const value of this) {
                 const key = keySelector(value, index++, this);
+
                 const group =
                     groups.get(key) ??
                     setAndGet(groups, key, new StreamableArray());
+
                 group.push(value);
             }
-            return Stream.of(groups);
+            return groups;
         });
     }
 
+    /**
+     * Am out-of-place sort of the values in the Stream bases on the given comparator. Like {@link Array.sort}.
+     * @returns A Stream of the original Streams values sorted by the comparator.
+     * @params comparator How to sort the values. If ommited, the values are sorted in ascending, ASCII order.
+     */
     public sort(comparator?: (a: T, b: T) => number): Stream<T> {
         return Stream.from(() => {
             const sorted = this.toArray();
@@ -118,6 +127,10 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
         });
     }
 
+    /**
+     * Reverses the stream.
+     * @returns A Stream of the original Stream in reverse order.
+     */
     public reverse(): Stream<T> {
         const self = this;
         return Stream.iter(function* () {
@@ -126,6 +139,11 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
         });
     }
 
+    /**
+     * Takes the values in the start of the Stream that pass the given test. All values following and including the first value that does not pass the test are ommitted.
+     * @param test Returns true if the value passes and false if it fails.
+     * @returns A Stream over the first values in the original Stream that pass the given test.
+     */
     public takeWhile(test: (value: T, index: number, stream: this) => boolean) {
         const self = this;
         return Stream.iter(function* () {
@@ -189,48 +207,119 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
         });
     }
 
+    branch(): StreamableTuple<[]>;
+    branch<A>(branchA: (Stream: Stream<T>) => A): StreamableTuple<[A]>;
+    branch<A, B>(
+        branchA: (Stream: Stream<T>) => A,
+        branchB: (Stream: Stream<T>) => B
+    ): StreamableTuple<[A, B]>;
+    branch<A, B, C>(
+        branchA: (Stream: Stream<T>) => A,
+        branchB: (Stream: Stream<T>) => B,
+        branchC: (Stream: Stream<T>) => C
+    ): StreamableTuple<[A, B, C]>;
+    branch<A, B, C, D>(
+        branchA: (Stream: Stream<T>) => A,
+        branchB: (Stream: Stream<T>) => B,
+        branchC: (Stream: Stream<T>) => C,
+        branchD: (Stream: Stream<T>) => D
+    ): StreamableTuple<[A, B, C, D]>;
+    branch<A, B, C, D, E>(
+        branchA: (Stream: Stream<T>) => A,
+        branchB: (Stream: Stream<T>) => B,
+        branchC: (Stream: Stream<T>) => C,
+        branchD: (Stream: Stream<T>) => D,
+        branchE: (Stream: Stream<T>) => E
+    ): StreamableTuple<[A, B, C, D, E]>;
+    branch<A, B, C, D, E, F>(
+        branchA: (Stream: Stream<T>) => A,
+        branchB: (Stream: Stream<T>) => B,
+        branchC: (Stream: Stream<T>) => C,
+        branchD: (Stream: Stream<T>) => D,
+        branchE: (Stream: Stream<T>) => E,
+        branchF: (Stream: Stream<T>) => F
+    ): StreamableTuple<[A, B, C, D, E, F]>;
+    branch<A, B, C, D, E, F, G>(
+        branchA: (Stream: Stream<T>) => A,
+        branchB: (Stream: Stream<T>) => B,
+        branchC: (Stream: Stream<T>) => C,
+        branchD: (Stream: Stream<T>) => D,
+        branchE: (Stream: Stream<T>) => E,
+        branchF: (Stream: Stream<T>) => F,
+        branchG: (Stream: Stream<T>) => G
+    ): StreamableTuple<[A, B, C, D, E, F, G]>;
+    branch<A, B, C, D, E, F, G, H>(
+        branchA: (Stream: Stream<T>) => A,
+        branchB: (Stream: Stream<T>) => B,
+        branchC: (Stream: Stream<T>) => C,
+        branchD: (Stream: Stream<T>) => D,
+        branchE: (Stream: Stream<T>) => E,
+        branchF: (Stream: Stream<T>) => F,
+        branchG: (Stream: Stream<T>) => G,
+        branchH: (Stream: Stream<T>) => H
+    ): StreamableTuple<[A, B, C, D, E, F, G, H]>;
+
+    branch<R>(...branches: ((stream: Stream<T>) => R)[]): StreamableArray<R>;
+
+    branch(...branches: ((stream: Stream<T>) => any)[]): StreamableArray<any> {
+        const stream = this.stream();
+
+        const results = new StreamableArray<any>();
+        for (let i = 0; i < branches.length; i++) {
+            results.push(branches[i](stream));
+        }
+
+        return results;
+    }
+
     public defined(): Stream<T extends undefined ? never : T> {
-        const self = this;
-        return Stream.iter(function* () {
-            for (const value of self) if (value !== undefined) yield value;
-        }) as any;
+        return this.filter((value) => value !== undefined) as any;
     }
 
     public nonNull(): Stream<T extends null ? never : T> {
-        const self = this;
-        return Stream.iter(function* () {
-            for (const value of self) if (value !== null) yield value;
-        }) as any;
+        return this.filter((value) => value !== null) as any;
     }
 
-    public undefined(): Stream<T extends undefined ? undefined : never> {
-        const self = this;
-        return Stream.iter(function* () {
-            for (const value of self) if (value === undefined) yield value;
-        }) as any;
+    public undefined(): Stream<T extends undefined ? T : undefined> {
+        return this.filter((value) => value === undefined) as any;
     }
 
-    public null(): Stream<T extends null ? null : never> {
-        const self = this;
-        return Stream.iter(function* () {
-            for (const value of self) if (value === undefined) yield value;
-        }) as any;
+    public null(): Stream<T extends null ? T : null> {
+        return this.filter((value) => value === null) as any;
     }
 
-    public nullableObjects(): Stream<T extends object | null ? T : never> {
-        const self = this;
-        return Stream.iter(function* () {
-            for (const value of self)
-                if (typeof value === "object") yield value;
-        }) as any;
+    public nullableObjects(): Stream<
+        T extends object | null ? T : object | null
+    > {
+        return this.filter((value) => typeof value === "object") as any;
     }
 
-    public objects(): Stream<T extends object ? T : never> {
-        const self = this;
-        return Stream.iter(function* () {
-            for (const value of self)
-                if (typeof value === "object" && value !== null) yield value;
-        }) as any;
+    public objects(): Stream<T extends object ? T : object> {
+        return this.filter(
+            (value) => value !== null && typeof value === "object"
+        ) as any;
+    }
+
+    public numbers(): Stream<T extends number ? T : number> {
+        return this.filter((value) => typeof value === "bigint") as any;
+    }
+
+    public bigints(): Stream<T extends bigint ? T : bigint> {
+        return this.filter((value) => typeof value === "bigint") as any;
+    }
+
+    public strings(): Stream<T extends string ? T : string> {
+        return this.filter((value) => typeof value === "string") as any;
+    }
+
+    public booleans(): Stream<T extends boolean ? T : boolean> {
+        return this.filter((value) => typeof value === "boolean") as any;
+    }
+
+    public functions(): Stream<T extends Function ? T : Function> {
+        return this.filter(
+            (value) => typeof value === "function" || value instanceof Function
+        ) as any;
     }
 
     public toArray(): T[] {
@@ -242,7 +331,7 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
     }
 
     public stream(): Stream<T> {
-        return Stream.of(this.toArray());
+        return Stream.of(this.asArray());
     }
 
     public asArray(): readonly T[] {
@@ -325,6 +414,14 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
         return includes(this.getSource(), value);
     }
 
+    /** @returns Whether the Stream conains any value. */
+    public some(): boolean;
+
+    /** @returns Whether the stream contains any values that pass the given test. */
+    public some(
+        test: (value: T, index: number, stream: this) => boolean
+    ): boolean;
+
     public some(
         test: (value: T, index: number, stream: this) => boolean = () => true
     ): boolean {
@@ -333,12 +430,19 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
         return false;
     }
 
+    /** @returns Whether the Stream is empty. */
+    public none(): boolean;
+    /** @returns Whether none of the values in the stream pass the given test. */
+    public none(
+        test: (value: T, index: number, stream: this) => boolean
+    ): boolean;
     public none(
         test: (value: T, index: number, stream: this) => boolean = () => true
     ): boolean {
         return !this.some(test);
     }
 
+    /** Whether all values in the Stream pass the given test. */
     public every(
         test: (value: T, index: number, stream: this) => boolean
     ): boolean {
@@ -351,7 +455,7 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
         return join(this, separator);
     }
 
-    public flatten(): Stream<T extends Iterable<infer subT> ? subT : unknown> {
+    public flat(): Stream<T extends Iterable<infer subT> ? subT : unknown> {
         const self = this;
         return Stream.iter(function* () {
             for (const value of self) {
@@ -370,6 +474,21 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
         return undefined;
     }
 
+    public findIndex(
+        test: (value: T, index: number, stream: this) => boolean
+    ): number | undefined {
+        let index = 0;
+        for (const value of this) {
+            if (test(value, index, this)) return index;
+            index++;
+        }
+        return undefined;
+    }
+
+    public indexOf(value: T): number | undefined {
+        return this.findIndex((streamValue) => Object.is(value, streamValue));
+    }
+
     public first(): T | undefined {
         for (const value of this) return value;
         return undefined;
@@ -381,5 +500,9 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
 
     public at(index: number | bigint) {
         return at(this.getSource(), index);
+    }
+
+    public count(): number {
+        return count(this.getSource());
     }
 }

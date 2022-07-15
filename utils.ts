@@ -86,11 +86,13 @@ export function join(
     separator: string = ""
 ): string {
     if (isArray(collection)) return collection.join(separator);
+    
     const result: string[] = [];
     const iterator = collection[Symbol.iterator]();
     let next = iterator.next();
     if (next.done) return "";
     result.push(next.value);
+
     while (!(next = iterator.next()).done) {
         result.push(separator);
         result.push(next.value);
@@ -98,6 +100,7 @@ export function join(
     return result.join();
 }
 
+/** Signal for breaking out of a loop. */
 export const breakSignal = Symbol("breakSignal");
 
 export function forEach<T>(
@@ -162,5 +165,13 @@ export function reverse<T>(collection: Iterable<T>): Iterable<T> {
     });
 }
 
-type lessOne<T extends number> = [-1, 0,1,2,3,4,5,6,7,8,9][T];
-type t3 = lessOne<90>;
+export function count(collection: Iterable<any>): number {
+    if (isArray(collection)) return collection.length;
+    if (isSet(collection)) return collection.size;
+    if (collection instanceof Map) return collection.size;
+
+    let size = 0;
+    for (const _ of collection) size++;
+    return size;
+}
+export type ValueOf<T> = T[keyof T];
