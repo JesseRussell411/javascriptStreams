@@ -275,24 +275,42 @@ export function smartCompare(
 }
 
 export type Comparator<T> = (a: T, b: T) => number;
-export type Order<T> = ((value: T) => any) | Comparator<T>
+export type Order<T> = ((value: T) => any) | Comparator<T>;
 
-function orderIsPropertyGetter<T>(order: Order<T>): order is (value: T) => any {
-    return order.length === 1;
+export function reverseOrder<T>(order: Order<T>): Comparator<T> {
+    if (orderIsComparator(order)) {
+        return (a, b) => order(b, a);
+    } else {
+        return (a, b) => smartCompare(order(b), order(a));
+    }
 }
 
-function orderIsComparator<T>(order: Order<T>): order is Comparator<T> {
-    return !orderIsPropertyGetter(order);
+export function orderAsComparator<T>(
+    order: Order<T>
+): typeof order extends Comparator<T> ? typeof order : Comparator<T> {
+    if (orderIsComparator(order)) return order;
+    return (a, b) => smartCompare(order(a), order(b));
+}
+
+export function compareByOrder<T>(a: T, b: T, order: Order<T>) {
+    if (orderIsComparator(order)) return order(a, b);
+    return smartCompare(order(a), order(b));
+}
+
+export function orderIsPropertyGetter<T>(
+    order: Order<T>
+): order is (value: T) => any {
+    return !orderIsComparator(order);
+}
+
+export function orderIsComparator<T>(order: Order<T>): order is Comparator<T> {
+    return order.length > 1;
 }
 
 export function multiCompare<T>(a: T, b: T, orders: Iterable<Order<T>>) {
     for (const order of orders) {
-        let comp: number;
-        if (orderIsComparator(order)) {
-            return order(a, b);
-        } else {
-            comp = smartCompare(order(a), order(b));
-        }
+        const comp = compareByOrder(a, b, order);
+
         if (comp !== 0) return comp;
     }
     return 0;

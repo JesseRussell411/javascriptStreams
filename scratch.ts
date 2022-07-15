@@ -177,22 +177,22 @@ async function main() {
             .filter(c =>
                 ["MT", "OH", "WA", "FL"].includes(c.state.toUpperCase())
             )
+            .orderBy(() => Math.random())
             .groupBy(c => c.state)
             .map(g => [
                 g[0],
                 g[1]
                     .stream()
-                    .orderBy(c => c.city)
-                    .thenBy((a, b) => a.id - b.id)
-                    .repeat(-1)
-                    .reverse()
+                    .orderByDescending(c => c.city)
+                    .thenBy(c => c.first_name)
+                    // .thenBy(c => c.first_name)
+                    // .thenBy((a, b) => b.id - a.id)
                     .map(c =>
                         [
                             c.city,
-                            c.company_name,
                             c.id,
-                            c.first_name,
-                            c.last_name,
+                            [c.first_name, c.last_name].join(" "),
+                            c.company_name,
                             c.bad_text,
                         ].join(" | ")
                     )
