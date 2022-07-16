@@ -1,5 +1,4 @@
 import Stream from "./Stream";
-import { testDataPromise } from "./getTestData";
 import { and } from "./logic";
 
 export function lazy<T>(getter: () => T): () => T {
@@ -452,7 +451,7 @@ export function prepend<T>(collection: Iterable<T>, value: T) {
     });
 }
 
-/** Shuffles the array in-place using the fisher-yates algorithm. */
+/** Performs a fisher-yates shuffle on the array (in-place). */
 export function shuffle<T>(array: T[]): void {
     for (let i = array.length - 1; i > 0; i--) {
         const j = Math.trunc(Math.random() * (i + 1));

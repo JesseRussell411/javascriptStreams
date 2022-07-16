@@ -36,6 +36,7 @@ import {
     prepend,
     range,
     generate,
+    shuffle,
 } from "./utils";
 
 function isSolid(collection: Iterable<any>): boolean {
@@ -298,8 +299,9 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
         });
     }
 
-    public alternate(interval: number | bigint): Stream<T> {
+    public alternate(interval: number | bigint = 2): Stream<T> {
         const usableInterval = BigInt(interval);
+        if (usableInterval < 1) throw new Error(`interval must be 1 or greater but ${interval} as given`)
 
         const self = this;
         return Stream.iter(function* () {
@@ -314,7 +316,14 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
     }
 
     public shuffle(): Stream<T> {
-        return Stream.from(() => shuffled(this));
+        return new Stream(
+            () => {
+                const array = this.toArray();
+                shuffle(array);
+                return array;
+            },
+            { oneOff: true }
+        );
     }
 
     public append(value: T) {

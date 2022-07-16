@@ -1,6 +1,6 @@
 import fs from "fs/promises";
 import { lazy } from "./utils";
-export const testDataPromise: Promise<
+export async function getTestData(): Promise<
     {
         id: number;
         first_name: string;
@@ -15,7 +15,7 @@ export const testDataPromise: Promise<
         company_name: string;
         bad_text: string;
     }[]
-> = (async () => {
+> {
     const data = await fs.readFile("testData.json");
     return JSON.parse(data.toString());
-})();
+}
