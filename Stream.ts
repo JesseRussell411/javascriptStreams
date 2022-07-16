@@ -1,5 +1,5 @@
 import { and, or } from "./logic";
-import { Streamable, StreamableArray, StreamableTuple } from "./streamable";
+import { Streamable, StreamableArray, StreamableTuple } from "./Streamable";
 import {
     lazy,
     iter,
@@ -47,28 +47,33 @@ function isSolid(collection: Iterable<any>): boolean {
 }
 
 export default class Stream<T> implements Iterable<T>, Streamable<T> {
-    private getSource: () => Iterable<T>;
+    protected readonly getSource: () => Iterable<T>;
+    protected readonly sourceProperties: { oneOff?: true };
 
-    protected constructor(getSource: () => Iterable<T>) {
+    public constructor(
+        getSource: () => Iterable<T>,
+        sourceProperties: { oneOff?: true } = {}
+    ) {
+        this.sourceProperties = sourceProperties;
         this.getSource = getSource;
     }
 
     public static empty<T>(): Stream<T> {
-        return new Stream<T>(() => []);
+        return new Stream<T>(() => [], {});
     }
 
     public static of<T>(source: Iterable<T>) {
-        return new Stream(() => source);
+        return new Stream(() => source, {});
     }
 
     /** @returns A Stream of the collection from the given function. */
     public static from<T>(sourceGetter: () => Iterable<T>) {
-        return new Stream(sourceGetter);
+        return new Stream(sourceGetter, {});
     }
 
     /** @returns A Stream of the generator from the given function. */
     public static iter<T>(generatorGetter: () => Generator<T>) {
-        return new Stream(() => iter(generatorGetter));
+        return new Stream(() => iter(generatorGetter), {});
     }
 
     public static range(
@@ -108,25 +113,21 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
      * @param callback What to call for each value. If {@link breakSignal} is returned, iteration is stopped.
      * @returns The Stream.
      */
-    public forEach(
-        callback: (value: T, index: number, stream: this) => Symbol | void
-    ): this {
+    public forEach(callback: (value: T, index: number) => Symbol | void): this {
         let index = 0;
         for (const value of this) {
-            if (callback(value, index++, this) === breakSignal) break;
+            if (callback(value, index++) === breakSignal) break;
         }
 
         return this;
     }
 
     /** @returns A Stream of the given mapping from the original Stream. Like {@link Array.map}. */
-    public map<R>(
-        mapping: (value: T, index: number, stream: this) => R
-    ): Stream<R> {
+    public map<R>(mapping: (value: T, index: number) => R): Stream<R> {
         const self = this;
         return Stream.iter(function* () {
             let index = 0;
-            for (const value of self) yield mapping(value, index++, self);
+            for (const value of self) yield mapping(value, index++);
         });
     }
 
@@ -134,14 +135,11 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
      * @returns A stream of the values that pass the filter. Like {@link Array.filter}.
      * @param filter Whether the given value passes the filter. Return true to include the value in the returned Stream and false to not include it.
      */
-    public filter(
-        filter: (value: T, index: number, stream: this) => boolean
-    ): Stream<T> {
+    public filter(filter: (value: T, index: number) => boolean): Stream<T> {
         const self = this;
         return Stream.iter(function* () {
             let index = 0;
-            for (const value of self)
-                if (filter(value, index, self)) yield value;
+            for (const value of self) if (filter(value, index)) yield value;
         });
     }
 
@@ -162,24 +160,27 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
      * @returns A Stream over the groups. Each value is an Array where the first item is the group's key and the second item is the groups values.
      */
     public groupBy<K>(
-        keySelector: (value: T, index: number, stream: this) => K
+        keySelector: (value: T, index: number) => K
     ): Stream<[K, StreamableArray<T>]> {
-        return Stream.from(() => {
-            const groups = new Map<K, StreamableArray<T>>();
+        return new Stream(
+            () => {
+                const groups = new Map<K, StreamableArray<T>>();
 
-            let index = 0;
-            for (const value of this) {
-                const key = keySelector(value, index++, this);
+                let index = 0;
+                for (const value of this) {
+                    const key = keySelector(value, index++);
 
-                const group =
-                    groups.get(key) ??
-                    setAndGet(groups, key, new StreamableArray());
+                    const group =
+                        groups.get(key) ??
+                        setAndGet(groups, key, new StreamableArray());
 
-                group.push(value);
-            }
+                    group.push(value);
+                }
 
-            return groups;
-        });
+                return groups;
+            },
+            { oneOff: true }
+        );
     }
 
     /**
@@ -198,13 +199,17 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
     public orderBy(comparator: Comparator<T>): OrderedStream<T>;
     public orderBy(parameter: (value: T) => any): OrderedStream<T>;
     public orderBy(order: Order<T>): OrderedStream<T> {
-        return OrderedStream.of(this, [order]);
+        return new OrderedStream(
+            this.getSource,
+            [order],
+            this.sourceProperties
+        );
     }
 
     public orderByDescending(comparator: Comparator<T>): OrderedStream<T>;
     public orderByDescending(parameter: (value: T) => any): OrderedStream<T>;
     public orderByDescending(order: Order<T>): OrderedStream<T> {
-        return OrderedStream.of(this, [reverseOrder(order)]);
+        return this.orderBy(reverseOrder(order));
     }
 
     public order(): OrderedStream<T> {
@@ -232,22 +237,22 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
      * @param test Returns true if the value passes and false if it fails.
      * @returns A Stream over the first values in the original Stream that pass the given test.
      */
-    public takeWhile(test: (value: T, index: number, stream: this) => boolean) {
+    public takeWhile(test: (value: T, index: number) => boolean) {
         const self = this;
         return Stream.iter(function* () {
             let index = 0;
             for (const value of self) {
-                if (!test(value, index++, self)) break;
+                if (!test(value, index++)) break;
                 yield value;
             }
         });
     }
 
-    public skipWhile(test: (value: T, index: number, stream: this) => boolean) {
+    public skipWhile(test: (value: T, index: number) => boolean) {
         const self = this;
         return Stream.iter(function* () {
             let index = 0;
-            for (const value of self) if (test(value, index++, self)) break;
+            for (const value of self) if (test(value, index++)) break;
             for (const value of self) yield value;
         });
     }
@@ -460,17 +465,24 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
     }
 
     public toArray(): T[] {
-        return [...this];
+        const source = this.getSource();
+        if (this.sourceProperties.oneOff && isArray(source)) return source;
+
+        return [...source];
     }
 
     public toSet(): Set<T> {
-        return new Set(this);
+        const source = this.getSource();
+        if (this.sourceProperties.oneOff && isSet(source)) return source;
+
+        return new Set(source);
     }
 
     public stream(): Stream<T> {
         const source = this.getSource();
 
-        if (isSolid(source)) return Stream.of(source);
+        if (this.sourceProperties.oneOff && isSolid(source))
+            return Stream.of(source);
 
         return Stream.of(this.toArray());
     }
@@ -534,39 +546,27 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
         keySelector?: (value: T, index: number) => K,
         valueSelector?: (value: T, index: number) => V
     ): ReadonlyMap<K, V> {
-        return toMap(
-            this.getSource(),
-            keySelector as any,
-            valueSelector as any
-        );
+        const source = this.getSource();
+        if (this.sourceProperties.oneOff && source instanceof Map)
+            return source;
+        return toMap(source, keySelector as any, valueSelector as any);
     }
 
     public reduce(
         reduction: (
             previousResult: DeLiteral<T>,
             current: T,
-            index: number,
-            stream: this
+            index: number
         ) => DeLiteral<T>
     ): DeLiteral<T> | undefined;
 
     public reduce<R>(
-        reduction: (
-            previousResult: R,
-            current: T,
-            index: number,
-            stream: this
-        ) => R,
+        reduction: (previousResult: R, current: T, index: number) => R,
         initialValue: R
     ): R;
 
     public reduce(
-        reduction: (
-            previousResult: any,
-            current: T,
-            index: number,
-            stream: this
-        ) => any,
+        reduction: (previousResult: any, current: T, index: number) => any,
         initialValue?: any
     ): any {
         const iterator = this[Symbol.iterator]();
@@ -585,7 +585,7 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
         }
 
         while (!(next = iterator.next()).done) {
-            result = reduction(result, next.value, index, this);
+            result = reduction(result, next.value, index);
         }
 
         return result;
@@ -599,36 +599,30 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
     public some(): boolean;
 
     /** @returns Whether the stream contains any values that pass the given test. */
-    public some(
-        test: (value: T, index: number, stream: this) => boolean
-    ): boolean;
+    public some(test: (value: T, index: number) => boolean): boolean;
 
     public some(
-        test: (value: T, index: number, stream: this) => boolean = () => true
+        test: (value: T, index: number) => boolean = () => true
     ): boolean {
         let index = 0;
-        for (const value of this) if (test(value, index++, this)) return true;
+        for (const value of this) if (test(value, index++)) return true;
         return false;
     }
 
     /** @returns Whether the Stream is empty. */
     public none(): boolean;
     /** @returns Whether none of the values in the stream pass the given test. */
+    public none(test: (value: T, index: number) => boolean): boolean;
     public none(
-        test: (value: T, index: number, stream: this) => boolean
-    ): boolean;
-    public none(
-        test: (value: T, index: number, stream: this) => boolean = () => true
+        test: (value: T, index: number) => boolean = () => true
     ): boolean {
         return !this.some(test);
     }
 
     /** Whether all values in the Stream pass the given test. */
-    public every(
-        test: (value: T, index: number, stream: this) => boolean
-    ): boolean {
+    public every(test: (value: T, index: number) => boolean): boolean {
         let index = 0;
-        for (const value of this) if (!test(value, index++, this)) return false;
+        for (const value of this) if (!test(value, index++)) return false;
         return true;
     }
 
@@ -647,20 +641,18 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
         }) as any;
     }
 
-    public find(
-        test: (value: T, index: number, stream: this) => boolean
-    ): T | undefined {
+    public find(test: (value: T, index: number) => boolean): T | undefined {
         let index = 0;
-        for (const value of this) if (test(value, index++, this)) return value;
+        for (const value of this) if (test(value, index++)) return value;
         return undefined;
     }
 
     public findIndex(
-        test: (value: T, index: number, stream: this) => boolean
+        test: (value: T, index: number) => boolean
     ): number | undefined {
         let index = 0;
         for (const value of this) {
-            if (test(value, index, this)) return index;
+            if (test(value, index)) return index;
             index++;
         }
         return undefined;
@@ -702,35 +694,46 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
         throw new Error("No value found.");
     }
 
-    public singleOrUndefined(test: (value: T, index: number) => boolean) {
+    public singleOrUndefined(
+        test: (value: T, index: number) => boolean
+    ): T | undefined {
         let result: T | undefined = undefined;
         let found = false;
         let index = 0;
         for (const value of this) {
             if (test(value, index++)) {
-                if (found) return this.undefined;
+                if (found) return undefined;
                 found = true;
                 result = value;
             }
         }
 
         if (found) return result as T;
-        return this.undefined;
+        return undefined;
     }
 }
 
 export class OrderedStream<T> extends Stream<T> {
-    private orderedBy: Comparator<T>[];
+    private readonly orderedBy: Comparator<T>[];
 
-    private constructor(
+    public constructor(
         getSource: () => Iterable<T>,
-        orderedBy: Iterable<Order<T>>
+        orderedBy: Iterable<Order<T>>,
+        sourceProperties: { oneOff?: true } = {}
     ) {
-        super(() => {
-            const source = [...getSource()];
-            source.sort((a, b) => multiCompare(a, b, this.orderedBy));
-            return source;
-        });
+        super(
+            () => {
+                const source = getSource();
+                const sorted: T[] =
+                    sourceProperties.oneOff && isArray(source)
+                        ? source
+                        : [...source];
+
+                sorted.sort((a, b) => multiCompare(a, b, this.orderedBy));
+                return sorted;
+            },
+            { oneOff: true }
+        );
         this.orderedBy = [...orderedBy];
     }
 
@@ -764,15 +767,16 @@ export class OrderedStream<T> extends Stream<T> {
     public thenBy(comparator: Comparator<T>): OrderedStream<T>;
     public thenBy(parameter: (value: T) => any): OrderedStream<T>;
     public thenBy(order: Order<T>): OrderedStream<T> {
-        return OrderedStream.of(this, append(this.orderedBy, order));
+        return new OrderedStream(
+            this.getSource,
+            append(this.orderedBy, order),
+            this.sourceProperties
+        );
     }
 
     public thenByDescending(comparator: Comparator<T>): OrderedStream<T>;
     public thenByDescending(parameter: (value: T) => any): OrderedStream<T>;
     public thenByDescending(order: Order<T>): OrderedStream<T> {
-        return OrderedStream.of(
-            this,
-            append(this.orderedBy, reverseOrder(order))
-        );
+        return this.thenBy(reverseOrder(order));
     }
 }

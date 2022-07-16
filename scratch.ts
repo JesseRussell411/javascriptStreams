@@ -1,7 +1,8 @@
 import Stream from "./Stream";
-import { StreamableArray } from "./streamable";
+import { StreamableArray } from "./Streamable";
 import { testDataPromise } from "./getTestData";
 import { DeLiterall, isArray, range, ValueOf } from "./utils";
+import { inspect } from "util";
 
 async function main() {
     const sa = new StreamableArray<number>(1, 2, 3, 4, 5, 6, 7);
@@ -172,35 +173,56 @@ async function main() {
             .toArray()
     );
 
+    // console.log(
+    //     customers
+    //         .filter(c =>
+    //             ["MT", "OH", "WA", "FL"].includes(c.state.toUpperCase())
+    //         )
+    //         .map(c => ({ ...c, score: Math.trunc(Math.random() * 5) }))
+    //         .orderBy(() => Math.random())
+    //         .groupBy(c => c.state)
+    //         .map(g => [
+    //             g[0],
+    //             g[1]
+    //                 .stream()
+    //                 .orderByDescending(c => c.city)
+    //                 .thenBy(c => c.score)
+    //                 .thenBy(c => c.id)
+    //                 .thenBy(c => c.first_name)
+    //                 .thenBy(c => c.last_name)
+    //                 // .thenBy(c => c.first_name)
+    //                 // .thenBy((a, b) => b.id - a.id)
+    //                 .map(c =>
+    //                     JSON.stringify({
+    //                         city: c.city,
+    //                         id: c.id,
+    //                         name: [c.first_name, c.last_name].join(" "),
+    //                         score: c.score,
+    //                         bad_text: c.bad_text,
+    //                     })
+    //                 )
+    //                 .toArray(),
+    //         ])
+    //         .toArray()
+    // );
+
     console.log(
-        customers
-            .filter(c =>
-                ["MT", "OH", "WA", "FL"].includes(c.state.toUpperCase())
-            )
-            .map(c => ({ ...c, score: Math.trunc(Math.random() * 5) }))
-            .orderBy(() => Math.random())
-            .groupBy(c => c.state)
-            .map(g => [
-                g[0],
-                g[1]
-                    .stream()
-                    .orderByDescending(c => c.city)
-                    .thenBy(c => c.score)
-                    .thenBy(c => c.first_name)
-                    .thenBy(c => c.last_name)
-                    .thenBy(c => c.id)
-                    // .thenBy(c => c.first_name)
-                    // .thenBy((a, b) => b.id - a.id)
-                    .map(c => (JSON.stringify({
-                        city: c.city,
-                        id: c.id,
-                        name: [c.first_name, c.last_name].join(" "),
-                        score: c.score,
-                        bad_text: c.bad_text,
-                    })))
-                    .toArray(),
-            ])
-            .toArray()
+        inspect(
+            customers
+                // .filter(c => ["MT", "FL"].includes(c.state))
+                .groupBy(c => c.first_name)
+                .filter(g => g[1].length === 3)
+                .map(g => g[1].stream().map(c => c.first_name))
+                .flat()
+                // .orderBy(c => c.first_name)
+                // .thenBy(c => c.last_name)
+                // .groupBy(c => c.city)
+                // .filter(g => g[1].length > 1)
+                .toArray(),
+            false,
+            null,
+            true
+        )
     );
 }
 main().catch(e => console.error(e));
