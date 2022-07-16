@@ -39,6 +39,8 @@ import {
     shuffle,
     including,
     excluding,
+    groupBy,
+    groupJoin,
 } from "./utils";
 
 function isSolid(collection: Iterable<any>): boolean {
@@ -164,25 +166,38 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
      */
     public groupBy<K>(
         keySelector: (value: T, index: number) => K
+    ): Stream<[K, StreamableArray<T>]>;
+    public groupBy<K, V>(
+        keySelector: (value: T, index: number) => K,
+        valueSelector: (value: T, index: number) => V
+    ): Stream<[K, StreamableArray<V>]>;
+    public groupBy<K>(
+        keySelector: (value: T, index: number) => K,
+        valueSelector: (value: T, index: number) => any = value => value
     ): Stream<[K, StreamableArray<T>]> {
-        return new Stream(
-            () => {
-                const groups = new Map<K, StreamableArray<T>>();
+        return new Stream(() => groupBy(this, keySelector, valueSelector), {
+            oneOff: true,
+        });
+    }
 
-                let index = 0;
-                for (const value of this) {
-                    const key = keySelector(value, index++);
-
-                    const group =
-                        groups.get(key) ??
-                        setAndGet(groups, key, new StreamableArray());
-
-                    group.push(value);
-                }
-
-                return groups;
-            },
-            { oneOff: true }
+    public groupJoin<I, K, R>(
+        inner: Iterable<I>,
+        keySelector: (value: T) => K,
+        innerKeySelector: (value: I) => K,
+        resultSelector: (outer: T, inner: Stream<I>) => R
+    ): Stream<R> {
+        return Stream.of(
+            groupJoin(
+                this,
+                inner,
+                keySelector,
+                innerKeySelector,
+                (inner, outer) =>
+                    resultSelector(
+                        inner,
+                        new Stream(() => outer, { oneOff: true })
+                    )
+            )
         );
     }
 
@@ -321,14 +336,11 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
     }
 
     public shuffle(): Stream<T> {
-        return new Stream(
-            () => {
-                const array = this.toArray();
-                shuffle(array);
-                return array;
-            },
-            { oneOff: true }
-        );
+        return new Stream(() => {
+            const array = this.toArray();
+            shuffle(array);
+            return array;
+        }, {});
     }
 
     public append(value: T) {
@@ -669,6 +681,30 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
 
     public last(): T | undefined {
         return last(this.getSource());
+    }
+    public random(): T | undefined;
+    public random(count: number | bigint): Stream<T>;
+
+    public random(_count?: number | bigint): T | undefined | Stream<T> {
+        const count = BigInt(_count ?? 1);
+        if (count < 0)
+            throw new Error(
+                `count must be 0 or greater but ${_count} was given`
+            );
+
+        if (_count === undefined) {
+            const array = this.asArray();
+            if (array.length === 0) return undefined;
+            return array[Math.trunc(Math.random() * array.length)];
+        } else {
+            const self = this;
+            return Stream.iter(function* () {
+                const array = self.asArray();
+                if (array.length === 0) return;
+                for (let i = 0n; i < count; i++)
+                    yield array[Math.trunc(Math.random() * array.length)];
+            });
+        }
     }
 
     public at(index: number | bigint) {

@@ -1,5 +1,6 @@
 import Stream from "./Stream";
 import { and } from "./logic";
+import { StreamableArray } from "./Streamable";
 
 export function lazy<T>(getter: () => T): () => T {
     let lazyGetter = () => {
@@ -565,5 +566,56 @@ export function excluding<T>(
         const setOfExcluding = asSet(other);
         for (const value of collection)
             if (!setOfExcluding.has(value)) yield value;
+    });
+}
+
+export function groupBy<T, K, V>(
+    collection: Iterable<T>,
+    keySelector: (value: T, index: number) => K,
+    valueSelector: (value: T, index: number) => V
+): Map<K, StreamableArray<V>>;
+
+export function groupBy<T, K>(
+    collection: Iterable<T>,
+    keySelector: (value: T, index: number) => K
+): Map<K, StreamableArray<T>>;
+
+export function groupBy<T, K>(
+    collection: Iterable<T>,
+    keySelector: (value: T, index: number) => K,
+    valueSelector: (value: T, index: number) => any = value => value
+): Map<K, StreamableArray<any>> {
+    const groups = new Map<K, StreamableArray<any>>();
+
+    let index = 0;
+    for (const value of collection) {
+        const key = keySelector(value, index);
+
+        const group =
+            groups.get(key) ??
+            setAndGet(groups, key, new StreamableArray<any>());
+
+        group.push(valueSelector(value, index));
+        index++;
+    }
+
+    return groups;
+}
+
+export function groupJoin<O, I, K, R>(
+    outer: Iterable<O>,
+    inner: Iterable<I>,
+    outerKeySelector: (value: O) => K,
+    innerKeySelector: (value: I) => K,
+    resultSelector: (outer: O, inner: Iterable<I>) => R
+): Iterable<R> {
+    return iter(function* () {
+        const innerGrouped = groupBy(inner, innerKeySelector);
+        let index = 0;
+        for (const value of outer) {
+            const key = outerKeySelector(value);
+            const inner = innerGrouped.get(key);
+            yield resultSelector(value, inner ?? []);
+        }
     });
 }
