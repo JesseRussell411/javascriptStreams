@@ -32,6 +32,10 @@ import {
     append,
     Order,
     reverseOrder,
+    shuffled,
+    prepend,
+    range,
+    generate,
 } from "./utils";
 
 function isSolid(collection: Iterable<any>): boolean {
@@ -65,6 +69,33 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
     /** @returns A Stream of the generator from the given function. */
     public static iter<T>(generatorGetter: () => Generator<T>) {
         return new Stream(() => iter(generatorGetter));
+    }
+
+    public static range(
+        start: bigint,
+        end: bigint,
+        step: bigint
+    ): Stream<bigint>;
+    public static range(start: bigint, end: bigint): Stream<bigint>;
+    public static range(end: bigint): Stream<bigint>;
+
+    public static range(
+        start: number | bigint,
+        end: number | bigint,
+        step: number | bigint
+    ): Stream<number>;
+    public static range(
+        start: number | bigint,
+        end: number | bigint
+    ): Stream<number>;
+    public static range(end: number | bigint): Stream<number>;
+
+    public static range(arg1: any, arg2?: any, arg3?: any): any {
+        return Stream.of(range(arg1, arg2, arg3));
+    }
+
+    public static generate<T>(from: () => T, length: number | bigint) {
+        return Stream.from(() => generate(from, length));
     }
 
     /** @returns An iterator over the Stream. */
@@ -275,6 +306,18 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
                 }
             }
         });
+    }
+
+    public shuffle(): Stream<T> {
+        return Stream.from(() => shuffled(this));
+    }
+
+    public append(value: T) {
+        return Stream.from(() => append(this, value));
+    }
+
+    public prepend(value: T) {
+        return Stream.from(() => prepend(this, value));
     }
 
     public with(needed: Iterable<T>): Stream<T> {
@@ -642,6 +685,37 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
 
     public count(): number {
         return count(this.getSource());
+    }
+
+    public single(test: (value: T, index: number) => boolean): T {
+        let result: T | undefined = undefined;
+        let found = false;
+        let index = 0;
+        for (const value of this) {
+            if (test(value, index++)) {
+                if (found) throw new Error("More that one value found.");
+                found = true;
+                result = value;
+            }
+        }
+        if (found) return result as T;
+        throw new Error("No value found.");
+    }
+
+    public singleOrUndefined(test: (value: T, index: number) => boolean) {
+        let result: T | undefined = undefined;
+        let found = false;
+        let index = 0;
+        for (const value of this) {
+            if (test(value, index++)) {
+                if (found) return this.undefined;
+                found = true;
+                result = value;
+            }
+        }
+
+        if (found) return result as T;
+        return this.undefined;
     }
 }
 

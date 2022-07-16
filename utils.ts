@@ -27,6 +27,12 @@ export function iter<T>(generatorGetter: () => Generator<T>) {
     };
 }
 
+export function empty<T>(): Iterable<T> {
+    return iter(function* () {
+        return;
+    });
+}
+
 export function combine<
     O1 extends Record<any, any>,
     O2 extends Record<any, any>
@@ -436,5 +442,103 @@ export function append<T>(collection: Iterable<T>, value: T) {
     return iter(function* () {
         for (const value of collection) yield value;
         yield value;
+    });
+}
+
+export function prepend<T>(collection: Iterable<T>, value: T) {
+    return iter(function* () {
+        yield value;
+        for (const value of collection) yield value;
+    });
+}
+
+/** Shuffles the array in-place using the fisher-yates algorithm. */
+export function shuffle<T>(array: T[]): void {
+    for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.trunc(Math.random() * (i + 1));
+
+        const temp = array[i];
+        array[i] = array[j];
+        array[j] = temp;
+    }
+}
+
+export function shuffled<T>(collection: Iterable<T>): Iterable<T> {
+    const array = [...collection];
+    shuffle(array);
+    return array;
+}
+
+export function range(
+    start: bigint,
+    end: bigint,
+    step: bigint
+): Iterable<bigint>;
+export function range(start: bigint, end: bigint): Iterable<bigint>;
+export function range(end: bigint): Iterable<bigint>;
+
+export function range(
+    start: number | bigint,
+    end: number | bigint,
+    step: number | bigint
+): Iterable<number>;
+export function range(
+    start: number | bigint,
+    end: number | bigint
+): Iterable<number>;
+export function range(end: number | bigint): Iterable<number>;
+
+export function range(_startOrEnd: any, _end?: any, _step?: any): any {
+    const useNumber =
+        typeof _startOrEnd === "number" ||
+        typeof _end === "number" ||
+        typeof _step === "number";
+
+    const ZERO = useNumber ? 0 : (0n as any);
+    const ONE = useNumber ? 1 : (1n as any);
+
+    let start: any;
+    let end: any;
+    let step: any;
+    if (_step !== undefined) {
+        start = _startOrEnd;
+        end = _end;
+        step = _step;
+    } else if (_end !== undefined) {
+        start = _startOrEnd;
+        end = _end;
+        step = ONE;
+    } else {
+        start = ZERO;
+        end = _startOrEnd;
+        step = ONE;
+    }
+
+    if (useNumber) {
+        start = Number(start);
+        end = Number(end);
+        step = Number(step);
+    }
+
+    if (step === ZERO) throw new Error("Step must not be zero.");
+
+    if (step < ZERO && start < end) return empty();
+    if (step > ZERO && start > end) return empty();
+
+    const test = step > ZERO ? (i: any) => i < end : (i: any) => i > end;
+
+    console.log({ start, end, step });
+    return iter(function* () {
+        for (let i = start; test(i); i += step) yield i;
+    });
+}
+
+export function generate<T>(
+    from: (index: number) => T,
+    length: number | bigint
+) {
+    const usableLength = Number(length);
+    return iter(function* () {
+        for (let i = 0; i < usableLength; i++) yield from(i);
     });
 }
