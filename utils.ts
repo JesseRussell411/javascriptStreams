@@ -541,3 +541,29 @@ export function generate<T>(
         for (let i = 0; i < usableLength; i++) yield from(i);
     });
 }
+
+export function including<T>(
+    collection: Iterable<T>,
+    other: Iterable<T>
+): Iterable<T> {
+    return iter(function* () {
+        const remaining = new Set(other);
+        for (const value of collection) {
+            remaining.delete(value);
+            yield value;
+        }
+
+        for (const value of remaining) yield value;
+    });
+}
+
+export function excluding<T>(
+    collection: Iterable<T>,
+    other: Iterable<T>
+): Iterable<T> {
+    return iter(function* () {
+        const setOfExcluding = asSet(other);
+        for (const value of collection)
+            if (!setOfExcluding.has(value)) yield value;
+    });
+}

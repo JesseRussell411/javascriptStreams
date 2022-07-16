@@ -37,6 +37,8 @@ import {
     range,
     generate,
     shuffle,
+    including,
+    excluding,
 } from "./utils";
 
 function isSolid(collection: Iterable<any>): boolean {
@@ -301,7 +303,10 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
 
     public alternate(interval: number | bigint = 2): Stream<T> {
         const usableInterval = BigInt(interval);
-        if (usableInterval < 1) throw new Error(`interval must be 1 or greater but ${interval} as given`)
+        if (usableInterval < 1)
+            throw new Error(
+                `interval must be 1 or greater but ${interval} was given`
+            );
 
         const self = this;
         return Stream.iter(function* () {
@@ -335,25 +340,11 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
     }
 
     public with(needed: Iterable<T>): Stream<T> {
-        const self = this;
-        return Stream.iter(function* () {
-            const remainingNeeded = new Set(needed);
-            for (const value of self) {
-                remainingNeeded.delete(value);
-                yield value;
-            }
-
-            for (const value of remainingNeeded) yield value;
-        });
+        return Stream.from(() => including(this, needed));
     }
 
     public without(remove: Iterable<T>): Stream<T> {
-        const self = this;
-        return Stream.iter(function* () {
-            const setToRemove = asSet(remove);
-
-            for (const value of self) if (!setToRemove.has(value)) yield value;
-        });
+        return Stream.from(() => excluding(this, remove));
     }
 
     public merge<O>(other: Iterable<O>): Stream<T | O> {
