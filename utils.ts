@@ -33,6 +33,13 @@ export function empty<T>(): Iterable<T> {
     });
 }
 
+export function concat<A, B>(a: Iterable<A>, b: Iterable<B>): Iterable<A | B> {
+    return iter(function* () {
+        for (const value of a) yield value;
+        for (const value of b) yield value;
+    });
+}
+
 export function combine<
     O1 extends Record<any, any>,
     O2 extends Record<any, any>
@@ -59,17 +66,40 @@ export function isIterable<T>(value: any): value is Iterable<unknown> {
     return typeof value?.[Symbol.iterator] === "function";
 }
 
-export function isArray<T>(collection: Iterable<T>): collection is T[] {
+export function isArray<T>(
+    collection: T[] | Set<T> | ReadonlySet<T>
+): collection is T[];
+export function isArray<T>(
+    collection: Iterable<T>
+): collection is T[] | readonly T[];
+export function isArray<T>(
+    collection: Iterable<T>
+): collection is T[] | readonly T[] {
     return Array.isArray(collection);
 }
 
-export function isSet<T>(collection: Iterable<T>): collection is Set<T> {
+export function isSet<T>(
+    collection: T[] | readonly T[] | Set<T>
+): collection is Set<T>;
+export function isSet<T>(
+    collection: Iterable<T>
+): collection is Set<T> | ReadonlySet<T>;
+export function isSet<T>(collection: Iterable<T>): boolean {
     return collection instanceof Set;
 }
 
 export function isMap<K, V>(
+    collection:
+        | Map<K, V>
+        | EntryLike<K, V>[]
+        | readonly EntryLike<K, V>[]
+        | Set<EntryLike<K, V>>
+        | ReadonlySet<EntryLike<K, V>>
+): collection is Map<K, V>;
+export function isMap<K, V>(
     collection: Iterable<EntryLike<K, V>>
-): collection is Map<K, V> {
+): collection is Map<K, V> | ReadonlyMap<K, V>;
+export function isMap<K, V>(collection: Iterable<EntryLike<K, V>>): boolean {
     return collection instanceof Map;
 }
 
@@ -87,6 +117,13 @@ export function asSet<T>(collection: Iterable<T>): ReadonlySet<T> {
     } else {
         return new Set(collection);
     }
+}
+
+export function asSolid<T>(collection: Iterable<T>): ReadonlySolid<T> {
+    if (isArray(collection)) return collection;
+    if (isSet(collection)) return collection;
+    if (collection instanceof Map) return collection as any;
+    return [...collection];
 }
 
 export function includes<T>(collection: Iterable<T>, value: T) {
@@ -200,6 +237,8 @@ export function asNumber(
     return Number(value);
 }
 
+export type ObjectKey = number | string | symbol;
+
 function rateType(value: any) {
     if (value === null) return 8;
     if (Array.isArray(value)) return 2;
@@ -227,14 +266,12 @@ function rateType(value: any) {
     }
     return -1;
 }
-
-export type ObjectKey = number | string | symbol;
 export interface SmartCompareOptions {
     compareObjects?: (
         a: Record<ObjectKey, any>,
         b: Record<ObjectKey, any>
     ) => number;
-    compareArrays?: (a: any[], b: any[]) => number;
+    compareArrays?: (a: readonly any[], b: readonly any[]) => number;
 }
 
 export function smartCompare(
@@ -281,13 +318,14 @@ export function smartCompare(
 }
 
 export type Comparator<T> = (a: T, b: T) => number;
-export type Order<T> = ((value: T) => any) | Comparator<T>;
+export type keySelector<T, K> = (value: T) => K;
+export type Order<T> = keySelector<T, any> | Comparator<T>;
 
 export function reverseOrder<T>(order: Order<T>): Comparator<T> {
     if (orderIsComparator(order)) {
         return (a, b) => order(b, a);
     } else {
-        return (a, b) => smartCompare(order(b), order(a));
+        return (a, b) => keySelectorToComparator(order)(b, a);
     }
 }
 
@@ -295,7 +333,13 @@ export function orderAsComparator<T>(
     order: Order<T>
 ): typeof order extends Comparator<T> ? typeof order : Comparator<T> {
     if (orderIsComparator(order)) return order;
-    return (a, b) => smartCompare(order(a), order(b));
+    return keySelectorToComparator(order);
+}
+
+export function keySelectorToComparator<T>(
+    keySelector: (value: T) => any
+): Comparator<T> {
+    return (a, b) => smartCompare(keySelector(a), keySelector(b));
 }
 
 export function compareByOrder<T>(a: T, b: T, order: Order<T>) {
@@ -303,7 +347,7 @@ export function compareByOrder<T>(a: T, b: T, order: Order<T>) {
     return smartCompare(order(a), order(b));
 }
 
-export function orderIsPropertyGetter<T>(
+export function orderIsKeySelector<T>(
     order: Order<T>
 ): order is (value: T) => any {
     return !orderIsComparator(order);
@@ -347,7 +391,7 @@ export function merge<A, B>(a: Iterable<A>, b: Iterable<B>): Iterable<A | B> {
 }
 
 // about literal types https://www.typescriptlang.org/docs/handbook/2/everyday-types.html#literal-types
-export type DeLiterall<T> = T extends number
+export type DeLiteral<T> = T extends number
     ? number
     : T extends string
     ? string
@@ -619,3 +663,135 @@ export function groupJoin<O, I, K, R>(
         }
     });
 }
+
+export function getNonEnumeratedCountOrUndefined(
+    collection: Iterable<any>
+): number | undefined {
+    if (isArray(collection)) return collection.length;
+    if (isSet(collection)) return collection.size;
+    if (collection instanceof Map) return collection.size;
+    return undefined;
+}
+
+export function distinct<T>(collection: Iterable<T>): Iterable<T> {
+    return iter(function* () {
+        const returned = new Set<T>();
+        for (const value of collection) {
+            if (!returned.has(value)) {
+                returned.add(value);
+                yield value;
+            }
+        }
+    });
+}
+
+export function intersect<T>(a: Iterable<T>, b: Iterable<T>) {
+    return distinct(
+        iter(function* () {
+            let set: ReadonlySet<T>, iterable: Iterable<T>;
+            if (isSet(a) && isSet(b)) {
+                if (a.size > b.size) {
+                    set = a;
+                    iterable = b;
+                } else {
+                    set = b;
+                    iterable = a;
+                }
+            } else if (isSet(a)) {
+                set = a;
+                iterable = b;
+            } else if (isSet(b)) {
+                set = b;
+                iterable = a;
+            } else {
+                const sizeA = getNonEnumeratedCountOrUndefined(a);
+                const sizeB = getNonEnumeratedCountOrUndefined(b);
+                if (sizeA !== undefined && sizeB !== undefined) {
+                    if (sizeA > sizeB) {
+                        set = new Set(a);
+                        iterable = b;
+                    } else {
+                        set = new Set(b);
+                        iterable = a;
+                    }
+                } else {
+                    set = new Set(b);
+                    iterable = a;
+                }
+            }
+
+            for (const value of iterable) if (set.has(value)) yield value;
+        })
+    );
+}
+
+export function getNonIteratedCount(
+    collection: readonly any[] | ReadonlySet<any> | ReadonlyMap<any, any>
+): number {
+    if (isArray(collection)) return collection.length;
+    return collection.size;
+}
+
+export class Random {
+    int = (
+        lowerBound: number | bigint,
+        upperBound: number | bigint
+    ): number => {
+        const min = Number(lowerBound);
+        const max = Number(upperBound);
+        return Math.trunc(Math.random() * (max - min) + min);
+    };
+
+    choice = <T>(options: ReadonlySolid<T>): T => {
+        const size = getNonIteratedCount(options);
+        if (size === 0) throw new Error("no options to choose from");
+        return at(options, this.int(0, size))!;
+    };
+
+    chooseAndRemove = <T>(
+        options:
+            | T[]
+            | Set<T>
+            | (T extends [infer K, infer V] ? Map<K, V> : never)
+    ): T => {
+        const size = getNonIteratedCount(options);
+        if (size === 0) throw new Error("no options to choose from");
+        if (Array.isArray(options)) {
+            const index = this.int(0, size);
+            return options.splice(index, 1)[0];
+        } else if (options instanceof Set) {
+            const result = at(options, this.int(0, size))!;
+            options.delete(result);
+            return result;
+        } else if (options instanceof Map) {
+            const result = at(options, this.int(0, size))!;
+            options.delete(result?.[0]);
+            return result as any;
+        }
+        throw new Error(
+            "Options is neither an Array, Set, or a Map. This should not be possible unless the type system was ignored."
+        );
+    };
+}
+
+export const random = new Random();
+
+export function isSolid<T>(
+    collection: Iterable<T>
+): collection is Solid<T> | ReadonlySolid<T> {
+    return (
+        Array.isArray(collection) ||
+        collection instanceof Set ||
+        collection instanceof Map
+    );
+}
+
+export type ReadonlySolid<T> =
+    | readonly T[]
+    | ReadonlySet<T>
+    | (T extends [infer K, infer V] ? ReadonlyMap<K, V> & Iterable<T> : never);
+
+export type Solid<T> =
+    | T[]
+    | Set<T>
+    | (T extends [infer K, infer V] ? Map<K, V> & Iterable<T> : never);

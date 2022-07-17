@@ -18,7 +18,7 @@ import {
     count,
     smartCompare,
     merge,
-    DeLiterall as DeLiteral,
+    DeLiteral as DeLiteral,
     SmartCompareOptions,
     EntryLike,
     EntryLikeValue,
@@ -41,14 +41,16 @@ import {
     excluding,
     groupBy,
     groupJoin,
+    getNonEnumeratedCountOrUndefined as getNonIteratedCountOrUndefined,
+    intersect,
+    random,
+    ReadonlySolid,
+    Solid,
+    isSolid,
 } from "./utils";
 
-function isSolid(collection: Iterable<any>): boolean {
-    return (
-        Array.isArray(collection) ||
-        collection instanceof Set ||
-        collection instanceof Map
-    );
+export function stream<T>(...values: T[]): Stream<T> {
+    return Stream.of(values);
 }
 
 export default class Stream<T> implements Iterable<T>, Streamable<T> {
@@ -295,6 +297,26 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
         });
     }
 
+    public insert<O>(other: Iterable<O>, at: number | bigint): Stream<T | O> {
+        const usableAt = BigInt(at);
+        if (usableAt < 0)
+            throw new Error(`at must be 0 or greater but ${at} was given`);
+        const self = this;
+        return Stream.iter(function* () {
+            const iter = self[Symbol.iterator]();
+            let next;
+
+            for (let i = 0n; i < usableAt && !(next = iter.next()).done; i++)
+                yield next.value;
+            for (const value of other) yield value;
+            while (!(next = iter.next()).done) yield next.value;
+        });
+    }
+
+    public insertValue(value: T, at: number | bigint) {
+        return this.insert([value], at);
+    }
+
     public unShift<O>(other: Iterable<O>): Stream<T | O> {
         const self = this;
         return Stream.iter(function* () {
@@ -428,6 +450,10 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
         return results;
     }
 
+    public intersect(other: Iterable<T>): Stream<T> {
+        return Stream.from(() => intersect(this.getSource(), other));
+    }
+
     public defined(): Stream<T extends undefined ? never : T> {
         return this.filter(value => value !== undefined) as any;
     }
@@ -478,25 +504,22 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
 
     public toArray(): T[] {
         const source = this.getSource();
-        if (this.sourceProperties.oneOff && isArray(source)) return source;
+        if (this.sourceProperties.oneOff && isArray(source))
+            return source as T[];
 
         return [...source];
     }
 
     public toSet(): Set<T> {
         const source = this.getSource();
-        if (this.sourceProperties.oneOff && isSet(source)) return source;
+        if (this.sourceProperties.oneOff && isSet(source))
+            return source as Set<T>;
 
         return new Set(source);
     }
 
     public stream(): Stream<T> {
-        const source = this.getSource();
-
-        if (this.sourceProperties.oneOff && isSolid(source))
-            return Stream.of(source);
-
-        return Stream.of(this.toArray());
+        return Stream.of(this.toSolid());
     }
 
     public asArray(): readonly T[] {
@@ -536,6 +559,14 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
         );
     }
 
+    public asSolid(): ReadonlySolid<T> {
+        const source = this.getSource();
+        if (isArray(source)) return source;
+        if (isSet(source)) return source;
+        if (source instanceof Map) return source as any;
+        return [...source];
+    }
+
     public toMap(): T extends EntryLike<infer K, infer V>
         ? ReadonlyMap<K, V>
         : never;
@@ -564,14 +595,31 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
         return toMap(source, keySelector as any, valueSelector as any);
     }
 
+    public toSolid(): Solid<T> {
+        const source = this.getSource();
+        if (this.sourceProperties.oneOff) {
+            if (Array.isArray(source)) return source;
+            if (source instanceof Set) return source;
+            if (source instanceof Map) return source as any;
+        }
+        return [...source];
+    }
+
+    /**
+     * Performs a reduction of the values in the Stream. Like {@link Array.reduce}.
+     * @throws If The Stream is empty.
+     */
     public reduce(
         reduction: (
             previousResult: DeLiteral<T>,
             current: T,
             index: number
         ) => DeLiteral<T>
-    ): DeLiteral<T> | undefined;
+    ): DeLiteral<T>;
 
+    /**
+     * Performs a reduction of the values in the Stream. Like {@link array.reduce}.
+     */
     public reduce<R>(
         reduction: (previousResult: R, current: T, index: number) => R,
         initialValue: R
@@ -591,7 +639,8 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
             index = 0;
         } else {
             next = iterator.next();
-            if (next.done) return undefined;
+            if (next.done)
+                throw new Error("reduce of empty Stream with no initial value");
             result = next.value;
             index = 1;
         }
@@ -603,11 +652,12 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
         return result;
     }
 
+    /** @returns Whether the stream contains the given value. */
     public includes(value: T): boolean {
         return includes(this.getSource(), value);
     }
 
-    /** @returns Whether the Stream conains any value. */
+    /** @returns Whether the Stream contains any values. */
     public some(): boolean;
 
     /** @returns Whether the stream contains any values that pass the given test. */
@@ -638,10 +688,15 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
         return true;
     }
 
-    public join(separator: string = ""): string {
+    /**
+     * Adds all the value in the Stream into a string, separated by the specified separator string. Like {@link Array.join}.
+     * @param separator Put in between the values in the resulting string. Defaults to a comma (,).
+     */
+    public join(separator?: string): string {
         return join(this, separator);
     }
 
+    /** Returns a Stream with sub-Stream elements concatenated into it. */
     public flat(): Stream<T extends Iterable<infer subT> ? subT : unknown> {
         const self = this;
         return Stream.iter(function* () {
@@ -653,12 +708,14 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
         }) as any;
     }
 
+    /** @returns The first value to pass the test or undefined if one wasn't found. */
     public find(test: (value: T, index: number) => boolean): T | undefined {
         let index = 0;
         for (const value of this) if (test(value, index++)) return value;
         return undefined;
     }
 
+    /** @returns The index of the first value to pass the test or undefined if one wasn't found. */
     public findIndex(
         test: (value: T, index: number) => boolean
     ): number | undefined {
@@ -670,19 +727,32 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
         return undefined;
     }
 
+    /** @returns The first index of the given value or undefined if the value isn't found. */
     public indexOf(value: T): number | undefined {
         return this.findIndex(streamValue => Object.is(value, streamValue));
     }
 
+    /** @returns The first value in the Stream or undefined if the Stream is empty. */
     public first(): T | undefined {
         for (const value of this) return value;
         return undefined;
     }
 
+    /** @returns The last value in the Stream or undefined if the Stream is empty. */
     public last(): T | undefined {
         return last(this.getSource());
     }
-    public random(): T | undefined;
+
+    /**
+     * @returns A random value from the Stream.
+     * @throws If the Stream is empty.
+     */
+    public random(): T;
+
+    /**
+     * @returns A Stream of random values from the original Stream. If the original Stream is empty, an empty Stream is returned.
+     * @param count The length of the Stream
+     */
     public random(count: number | bigint): Stream<T>;
 
     public random(_count?: number | bigint): T | undefined | Stream<T> {
@@ -693,8 +763,10 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
             );
 
         if (_count === undefined) {
+            return random.choice(this.asSolid());
             const array = this.asArray();
-            if (array.length === 0) return undefined;
+            if (array.length === 0)
+                throw new Error("no values to choose a random value from");
             return array[Math.trunc(Math.random() * array.length)];
         } else {
             const self = this;
@@ -707,14 +779,23 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
         }
     }
 
+    /** @returns The value at the given index or the value at the given negative index from the end of the Stream (-1 returns the last value, -2 returns the second to last value, etc.).*/
     public at(index: number | bigint) {
         return at(this.getSource(), index);
     }
 
+    /**
+     * Counts how many value are in the Stream.
+     * @returns The number of values in the Stream.
+     * */
     public count(): number {
         return count(this.getSource());
     }
 
+    /**
+     * @returns The single item in the Stream that passes the given test.
+     * @throws If no item passes the test or if more than one item passes the test.
+     */
     public single(test: (value: T, index: number) => boolean): T {
         let result: T | undefined = undefined;
         let found = false;
@@ -730,6 +811,9 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
         throw new Error("No value found.");
     }
 
+    /**
+     * @returns The single item in the Stream that passes the given test or undefined if no items pass the test or if more than one item passes the test.
+     */
     public singleOrUndefined(
         test: (value: T, index: number) => boolean
     ): T | undefined {
@@ -747,8 +831,19 @@ export default class Stream<T> implements Iterable<T>, Streamable<T> {
         if (found) return result as T;
         return undefined;
     }
+
+    /**
+     * Attempts to get the length of the Stream without iterating it.
+     * @returns The Streams length or undefined if the length could not be found without iterating the Stream.
+     */
+    public getNonIteratedCountOrUndefined(): number | undefined {
+        return getNonIteratedCountOrUndefined(this.getSource());
+    }
 }
 
+/**
+ * A {@link Stream} ordered by a collection of Comparators. Use {@link OrderedStream.thenBy} to add more comparators to sort by.
+ */
 export class OrderedStream<T> extends Stream<T> {
     private readonly orderedBy: Comparator<T>[];
 
@@ -762,7 +857,7 @@ export class OrderedStream<T> extends Stream<T> {
                 const source = getSource();
                 const sorted: T[] =
                     sourceProperties.oneOff && isArray(source)
-                        ? source
+                        ? (source as T[])
                         : [...source];
 
                 sorted.sort((a, b) => multiCompare(a, b, this.orderedBy));
