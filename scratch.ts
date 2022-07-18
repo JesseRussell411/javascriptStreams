@@ -6,7 +6,7 @@ import { inspect } from "util";
 
 async function main() {
     const customers = Stream.of(await getTestData());
-    const customersShuffled = customers.shuffle().stream();
+    const customersShuffled = customers.shuffle().solidify();
     const products = (() => {
         let id = 1;
         const productNames = [
@@ -50,7 +50,7 @@ async function main() {
                 id: id++,
             }),
             productNames.length
-        ).stream();
+        ).solidify();
     })();
 
     const purchases = Stream.generate(
