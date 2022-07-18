@@ -49,6 +49,8 @@ import {
     isSolid,
     asSolid,
     bigintComparator,
+    alternate,
+    getNonIteratedCount,
 } from "./utils";
 
 export interface StreamSourceProperties<T> {
@@ -432,10 +434,19 @@ export default class Stream<T> implements Iterable<T> {
     public splice(start: number | bigint, deleteCount: number | bigint) {
         const useableStart = BigInt(start);
         const useableDeleteCount = BigInt(start);
-        if (useableStart < 0n)
-            throw new Error(
-                `start must be 0 or greater but ${start} was given`
+        if (useableStart < 0n) {
+            return new Stream(
+                () => {
+                    const array = this.toArray();
+                    array.splice(
+                        array.length + Number(useableStart),
+                        Number(useableDeleteCount)
+                    );
+                    return array;
+                },
+                { oneOff: true, immutable: this.sourceProperties.immutable }
             );
+        }
         if (useableDeleteCount < 0n)
             throw new Error(
                 `deleteCount must be 0 or greater but ${deleteCount} was given`
@@ -467,26 +478,25 @@ export default class Stream<T> implements Iterable<T> {
     }
 
     public alternate(interval: number | bigint = 2n): Stream<T> {
-        const usableInterval = BigInt(interval);
-        if (usableInterval < 1)
-            throw new Error(
-                `interval must be 1 or greater but ${interval} was given`
-            );
-
-        const self = this;
         return new Stream(
-            () =>
-                iter(function* () {
-                    let i = 1;
-                    for (const value of self) {
-                        if (i++ >= usableInterval) {
-                            i = 1;
-                            yield value;
-                        }
-                    }
-                }),
-            { immutable: this.sourceProperties.immutable }
+            () => alternate(this, interval),
+            this.sourceProperties
         );
+    }
+
+    public takeSparse(count: number | bigint) {
+        const usableCount = BigInt(count);
+        if (count < 0)
+            throw new Error(
+                `count must be 0 or greater but ${count} was given`
+            );
+        if (count === 0) return Stream.empty<T>();
+        const self = this;
+        return new Stream(() => {
+            const solid = this.asSolid();
+            const count = getNonIteratedCount(solid);
+            return alternate(solid, BigInt(count) / usableCount);
+        }, this.sourceProperties);
     }
 
     public shuffle(): Stream<T> {
@@ -687,6 +697,7 @@ export default class Stream<T> implements Iterable<T> {
         return toMap(source, keySelector as any, valueSelector as any);
     }
 
+    private cache_toSolid: Solid<T> | undefined = undefined;
     public toSolid(): Solid<T> {
         const source = this.getSource();
         if (this.sourceProperties.oneOff) {
@@ -694,7 +705,11 @@ export default class Stream<T> implements Iterable<T> {
             if (source instanceof Set) return source;
             if (source instanceof Map) return source as any;
         }
-        return [...source];
+        if (this.sourceProperties.immutable) {
+            if (this.cache_toSolid === undefined)
+                this.cache_toSolid = [...source];
+            return this.cache_toSolid;
+        } else return [...source];
     }
 
     /**

@@ -873,3 +873,24 @@ export type Solid<T> =
     | T[]
     | Set<T>
     | (T extends [infer K, infer V] ? Map<K, V> & Iterable<T> : never);
+
+export function alternate<T>(
+    collection: Iterable<T>,
+    interval: number | bigint = 2n
+): Iterable<T> {
+    const usableInterval = BigInt(interval);
+    if (usableInterval < 0)
+        throw new Error(
+            `interval must be 0 or greater but ${interval} was given`
+        );
+    if (usableInterval === 0n) return empty<T>();
+    return iter(function* () {
+        let i = 1;
+        for (const value of collection) {
+            if (i++ >= usableInterval) {
+                i = 1;
+                yield value;
+            }
+        }
+    });
+}

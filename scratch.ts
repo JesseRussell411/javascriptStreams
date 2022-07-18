@@ -62,7 +62,6 @@ async function main() {
     );
 
     console.log("start...");
-
     console.log(
         inspect(
             customers
@@ -75,49 +74,13 @@ async function main() {
                         purchases: purchases.toArray(),
                     })
                 )
-                .random(500)
-                .map(c => ({
-                    ...c,
-                    toString: () =>
-                        `${c.gender}, ${c.first_name}, ${c.last_name}, ${c.id}`,
-                }))
-                .if(
-                    s => s.count() === 100,
-                    s => s.map(c => ({ ...c, yes: true })),
-                    s => s.map(c => ({ ...c, yes: false }))
-                )
-                .orderBy(c => c.gender)
-                .branch(
-                    s => s.thenBy(c => c.first_name),
-                    s =>
-                        s.branch(
-                            s => s.thenBy(c => c.id),
-                            s => s.thenBy(c => c.last_name),
-                            s => s.take(1).forEach(c => console.log(c)),
-                            (a, b) => [
-                                a
-                                    .alternate(50)
-                                    .map(c => c.toString())
-                                    .asArray(),
-                                b
-                                    .alternate(50)
-                                    .map(c => c.toString())
-                                    .asArray(),
-                            ]
-                        ),
-                    s => {
-                        console.log("doing the thing");
-                        s.at(0);
-                    },
-                    (a, b) => [
-                        a
-                            .alternate(50)
-                            .map(c => c.toString())
-                            .asArray(),
-                        b,
-                    ]
-                ),
-
+                .filter(c => c.purchases.length > 1)
+                .orderBy(c => c.purchases.length)
+                .thenBy(c => c.first_name)
+                .thenBy(c => c.last_name)
+                .thenBy(c => c.id)
+                .takeSparse(10)
+                .asArray(),
             false,
             null,
             true
