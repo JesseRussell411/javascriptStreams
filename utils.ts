@@ -710,7 +710,7 @@ export function distinct<T>(collection: Iterable<T>): Iterable<T> {
     });
 }
 
-export function intersect<T>(a: Iterable<T>, b: Iterable<T>) {
+export function intersect<T>(a: Iterable<T>, b: Iterable<T>): Iterable<T> {
     return distinct(
         iter(function* () {
             let set: ReadonlySet<T>, iterable: Iterable<T>;
@@ -746,6 +746,19 @@ export function intersect<T>(a: Iterable<T>, b: Iterable<T>) {
             }
 
             for (const value of iterable) if (set.has(value)) yield value;
+        })
+    );
+}
+
+export function union<T>(a: Iterable<T>, b: Iterable<T>): Iterable<T> {
+    return distinct(concat(a, b));
+}
+
+export function difference<T>(a: Iterable<T>, b: Iterable<T>): Iterable<T> {
+    return distinct(
+        iter(function* () {
+            const setOfExcluding = asSet(b);
+            for (const value of a) if (!setOfExcluding.has(value)) yield value;
         })
     );
 }
