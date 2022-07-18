@@ -74,7 +74,7 @@ export default class Stream<T> implements Iterable<T> {
     }
 
     public static empty<T>(): Stream<T> {
-        return new Stream<T>(() => [], {});
+        return new Stream<T>(() => [], { oneOff: true });
     }
 
     public static of<T>(source: Iterable<T>) {
@@ -974,7 +974,10 @@ export class OrderedStream<T> extends Stream<T> {
     public static empty<T>(
         orderedBy: Iterable<Order<T>> = []
     ): OrderedStream<T> {
-        return new OrderedStream<T>(() => [], orderedBy);
+        return new OrderedStream<T>(() => [], orderedBy, {
+            oneOff: true,
+            alreadySorted: true,
+        });
     }
 
     /**
