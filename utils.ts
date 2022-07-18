@@ -703,7 +703,7 @@ export function groupJoin<O, I, K, R>(
     });
 }
 
-export function getNonEnumeratedCountOrUndefined(
+export function getNonIteratedCountOrUndefined(
     collection: Iterable<any>
 ): number | undefined {
     if (isArray(collection)) return collection.length;
@@ -743,8 +743,8 @@ export function intersection<T>(a: Iterable<T>, b: Iterable<T>): Iterable<T> {
                 set = b;
                 iterable = a;
             } else {
-                const sizeA = getNonEnumeratedCountOrUndefined(a);
-                const sizeB = getNonEnumeratedCountOrUndefined(b);
+                const sizeA = getNonIteratedCountOrUndefined(a);
+                const sizeB = getNonIteratedCountOrUndefined(b);
                 let other: Iterable<T>;
                 if (sizeA !== undefined && sizeB !== undefined) {
                     if (sizeA > sizeB) {

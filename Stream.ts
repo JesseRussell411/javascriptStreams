@@ -41,7 +41,7 @@ import {
     excluding,
     groupBy,
     groupJoin,
-    getNonEnumeratedCountOrUndefined as getNonIteratedCountOrUndefined,
+    getNonIteratedCountOrUndefined,
     intersection,
     random,
     ReadonlySolid,
@@ -54,9 +54,7 @@ export interface StreamSourceProperties<T> {
     oneOff?: true;
     immutable?: true;
 }
-export type OrderedStreamSourceProperties<T> = StreamSourceProperties<T> & {
-    cacheFirstSort?: true;
-};
+export type OrderedStreamSourceProperties<T> = StreamSourceProperties<T> & {};
 
 export function stream<T>(...values: T[]): Stream<T> {
     return Stream.of(values);
@@ -594,6 +592,20 @@ export default class Stream<T> implements Iterable<T> {
         return (args[args.length - 1] as any)(...results);
     }
 
+    public if<Rtrue, Rfalse>(
+        condition: (stream: Stream<T>) => boolean,
+        ifTrue: (stream: Stream<T>) => Rtrue,
+        ifFalse: (stream: Stream<T>) => Rfalse
+    ): Rtrue | Rfalse {
+        const stream = this.solidify();
+
+        if (condition(stream)) {
+            return ifTrue(stream);
+        } else {
+            return ifFalse(stream);
+        }
+    }
+
     public intersect(other: Iterable<T>): Stream<T> {
         return Stream.from(() => intersection(this.getSource(), other));
     }
@@ -1010,39 +1022,38 @@ export class OrderedStream<T> extends Stream<T> {
     protected readonly orderedBy: readonly Comparator<T>[];
     protected readonly originalGetSource: () => Iterable<T>;
     protected readonly sourceProperties: OrderedStreamSourceProperties<T>;
+    protected readonly getPreSorted: (() => Iterable<T>) | undefined;
 
     public constructor(
         getSource: () => Iterable<T>,
-        orderedBy: Iterable<Order<T>>,
-        sourceProperties: OrderedStreamSourceProperties<T> = {}
+        orderedBy: readonly Order<T>[],
+        sourceProperties: OrderedStreamSourceProperties<T> = {},
+        getPreSorted?: () => Iterable<T>
     ) {
-        let sortCache: Iterable<T> | undefined = undefined;
-        super(
-            () => {
-                if (
-                    !sourceProperties.cacheFirstSort ||
-                    sortCache === undefined
-                ) {
-                    const source = getSource();
-                    const sorted: T[] =
-                        sourceProperties.oneOff && Array.isArray(source)
-                            ? (source as T[])
-                            : [...source];
+        let properties: OrderedStreamSourceProperties<T>;
+        if (getPreSorted === undefined) {
+            properties = { oneOff: true };
+        } else {
+            properties = {};
+        }
 
-                    sorted.sort((a, b) => multiCompare(a, b, orderedBy));
-                    sortCache = sorted;
-                }
+        super(() => {
+            if (getPreSorted !== undefined) return getPreSorted();
+            console.log("sorting by: " + orderedBy);
 
-                return sortCache;
-            },
-            {
-                oneOff:
-                    sourceProperties.immutable === undefined ? true : undefined,
-            }
-        );
+            const source = getSource();
+            const sorted: T[] =
+                sourceProperties.oneOff && Array.isArray(source)
+                    ? (source as T[])
+                    : [...source];
+
+            sorted.sort((a, b) => multiCompare(a, b, orderedBy));
+            return sorted;
+        }, properties);
         this.originalGetSource = getSource;
-        this.orderedBy = [...orderedBy];
+        this.orderedBy = orderedBy;
         this.sourceProperties = sourceProperties;
+        this.getPreSorted = getPreSorted;
     }
 
     /**
@@ -1052,7 +1063,7 @@ export class OrderedStream<T> extends Stream<T> {
     public static empty<T>(
         orderedBy: Iterable<Order<T>> = []
     ): OrderedStream<T> {
-        return new OrderedStream<T>(() => [], orderedBy, {
+        return new OrderedStream<T>(() => [], [...orderedBy], {
             oneOff: true,
             immutable: true,
         });
@@ -1066,7 +1077,7 @@ export class OrderedStream<T> extends Stream<T> {
         source: Iterable<T>,
         orderedBy: Iterable<Order<T>> = []
     ): OrderedStream<T> {
-        return new OrderedStream(() => source ?? [], orderedBy);
+        return new OrderedStream(() => source ?? [], [...orderedBy]);
     }
 
     /**
@@ -1077,14 +1088,23 @@ export class OrderedStream<T> extends Stream<T> {
         sourceGetter: () => Iterable<T>,
         orderedBy: Iterable<Order<T>> = []
     ): OrderedStream<T> {
-        return new OrderedStream(sourceGetter, orderedBy);
+        return new OrderedStream(sourceGetter, [...orderedBy]);
     }
 
     public static iter<T>(
         generatorGetter: () => Generator<T>,
         orderedBy: Iterable<Order<T>> = []
     ): OrderedStream<T> {
-        return new OrderedStream(() => generatorGetter(), orderedBy);
+        return new OrderedStream(() => generatorGetter(), [...orderedBy]);
+    }
+
+    private lazySolidify(): OrderedStream<T> {
+        return new OrderedStream(
+            this.originalGetSource,
+            this.orderedBy,
+            {},
+            this.getPreSorted ?? lazy(() => this.solidify())
+        );
     }
 
     public thenBy(comparator: Comparator<T>): OrderedStream<T>;
@@ -1092,10 +1112,8 @@ export class OrderedStream<T> extends Stream<T> {
     public thenBy(order: Order<T>): OrderedStream<T> {
         return new OrderedStream(
             this.originalGetSource,
-            append(this.orderedBy, order),
-            {
-                oneOff: this.sourceProperties.oneOff,
-            }
+            [...this.orderedBy, order],
+            this.sourceProperties
         );
     }
 
@@ -1205,14 +1223,7 @@ export class OrderedStream<T> extends Stream<T> {
     ): CombinationResult;
 
     public branch(...args: any[]) {
-        let sortedCache: Iterable<T> | undefined = undefined;
-        const stream = new OrderedStream(
-            this.originalGetSource,
-            this.orderedBy,
-            {
-                cacheFirstSort: true,
-            }
-        );
+        const stream = this.lazySolidify();
 
         if (args.length < 2) return stream;
 
@@ -1222,5 +1233,18 @@ export class OrderedStream<T> extends Stream<T> {
         }
 
         return (args[args.length - 1] as any)(...results);
+    }
+
+    public if<Rtrue, Rfalse>(
+        condition: (stream: OrderedStream<T>) => boolean,
+        onTrue: (stream: OrderedStream<T>) => Rtrue,
+        onFalse: (stream: OrderedStream<T>) => Rfalse
+    ): Rtrue | Rfalse {
+        const stream = this.lazySolidify();
+        if (condition(stream)) {
+            return onTrue(stream);
+        } else {
+            return onFalse(stream);
+        }
     }
 }
