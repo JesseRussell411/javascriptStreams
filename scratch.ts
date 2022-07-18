@@ -1,5 +1,5 @@
 import Stream, { stream } from "./Stream";
-import { StreamableArray } from "./Streamable";
+import { StreamableArray } from "./streamable";
 import { getTestData } from "./getTestData";
 import { DeLiteral, isArray, random, range, ValueOf } from "./utils";
 import { inspect } from "util";
@@ -78,15 +78,16 @@ async function main() {
 
                 // .filter(c => c.purchases.length > 1)
 
-                .orderBy(c => c.gender)
-                .thenBy(c => c.purchases.length)
-                .thenBy(c => c.first_name)
+                
+                .orderBy(c => c.first_name)
                 .thenBy(c => c.last_name)
+                .thenBy(c => c.purchases.length)
                 .thenBy(c => c.id)
                 .branch(
-                    s => s.filter(c => c.purchases.length === 0),
-                    s => s.filter(c => c.purchases.length < 3 && c.purchases.length !== 0),
-                    (a, b) => a.concat(b)
+                    s => s.thenBy(c => c.purchases.length).thenBy(c => c.id),
+                    s => s.thenBy(c => c.gender).thenBy(c => c.id),
+                    s => s.filter(c => true),
+                    (a, b, c) => a.concat(b)
                 )
                 .alternate(10)
                 .map(

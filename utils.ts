@@ -1,6 +1,6 @@
 import Stream from "./Stream";
 import { and } from "./logic";
-import { StreamableArray } from "./Streamable";
+import { StreamableArray } from "./streamable";
 
 export function lazy<T>(getter: () => T): () => T {
     let lazyGetter = () => {
@@ -415,9 +415,15 @@ export type EntryLikeValue<V> =
     | [any, V, ...any]
     | { 1: V; [key: ObjectKey]: any };
 
-export function asMap<T extends EntryLike<K, V>, K, V>(
+export function asMap<T>(
     collection: Iterable<T>
-): ReadonlyMap<K, V>;
+): T extends EntryLike<infer K, infer V>
+    ? ReadonlyMap<K, V>
+    : T extends EntryLikeKey<infer K>
+    ? ReadonlyMap<K, unknown>
+    : T extends EntryLikeValue<infer V>
+    ? ReadonlyMap<unknown, V>
+    : ReadonlyMap<unknown, unknown>;
 
 export function asMap<T extends EntryLikeValue<V>, K, V>(
     collection: Iterable<T>,
@@ -718,7 +724,7 @@ export function distinct<T>(collection: Iterable<T>): Iterable<T> {
     });
 }
 
-export function intersect<T>(a: Iterable<T>, b: Iterable<T>): Iterable<T> {
+export function intersection<T>(a: Iterable<T>, b: Iterable<T>): Iterable<T> {
     return distinct(
         iter(function* () {
             let set: ReadonlySet<T>, iterable: Iterable<T>;
@@ -739,18 +745,37 @@ export function intersect<T>(a: Iterable<T>, b: Iterable<T>): Iterable<T> {
             } else {
                 const sizeA = getNonEnumeratedCountOrUndefined(a);
                 const sizeB = getNonEnumeratedCountOrUndefined(b);
+                let other: Iterable<T>;
                 if (sizeA !== undefined && sizeB !== undefined) {
                     if (sizeA > sizeB) {
-                        set = new Set(a);
+                        other = a;
                         iterable = b;
                     } else {
-                        set = new Set(b);
+                        other = b;
                         iterable = a;
                     }
                 } else {
-                    set = new Set(b);
+                    other = b;
                     iterable = a;
                 }
+                const iter = other[Symbol.iterator]();
+                let next;
+
+                const cache = new Set<T>();
+
+                for (const value of iterable) {
+                    if (cache.has(value)) yield value;
+
+                    while (!(next = iter.next()).done) {
+                        cache.add(next.value);
+                        if (Object.is(value, next.value)) {
+                            yield value;
+                            break;
+                        }
+                    }
+                }
+
+                return;
             }
 
             for (const value of iterable) if (set.has(value)) yield value;
@@ -765,8 +790,8 @@ export function union<T>(a: Iterable<T>, b: Iterable<T>): Iterable<T> {
 export function difference<T>(a: Iterable<T>, b: Iterable<T>): Iterable<T> {
     return distinct(
         iter(function* () {
-            const setOfExcluding = asSet(b);
-            for (const value of a) if (!setOfExcluding.has(value)) yield value;
+            const bSet = asSet(b);
+            for (const value of a) if (!bSet.has(value)) yield value;
         })
     );
 }
@@ -779,13 +804,21 @@ export function getNonIteratedCount(
 }
 
 export class Random {
-    int = (
+    // one day, I'll add a seed parameter to this class.
+    range = (
         lowerBound: number | bigint,
         upperBound: number | bigint
     ): number => {
         const min = Number(lowerBound);
         const max = Number(upperBound);
-        return Math.trunc(Math.random() * (max - min) + min);
+        return Math.random() * (max - min) + min;
+    };
+
+    int = (
+        lowerBound: number | bigint,
+        upperBound: number | bigint
+    ): number => {
+        return Math.trunc(this.range(lowerBound, upperBound));
     };
 
     choice = <T>(options: ReadonlySolid<T>): T => {
@@ -803,8 +836,7 @@ export class Random {
         const size = getNonIteratedCount(options);
         if (size === 0) throw new Error("no options to choose from");
         if (Array.isArray(options)) {
-            const index = this.int(0, size);
-            return options.splice(index, 1)[0];
+            return options.splice(this.int(0, size), 1)[0];
         } else if (options instanceof Set) {
             const result = at(options, this.int(0, size))!;
             options.delete(result);
@@ -815,7 +847,7 @@ export class Random {
             return result as any;
         }
         throw new Error(
-            "Options is neither an Array, Set, or a Map. This should not be possible unless the type system was ignored."
+            "Options is neither an Array, Set, or Map. This should not be possible unless the type system was ignored."
         );
     };
 }
