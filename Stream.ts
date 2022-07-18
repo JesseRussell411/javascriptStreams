@@ -47,6 +47,7 @@ import {
     ReadonlySolid,
     Solid,
     isSolid,
+    asSolid,
 } from "./utils";
 
 export function stream<T>(...values: T[]): Stream<T> {
@@ -316,7 +317,7 @@ export default class Stream<T> implements Iterable<T> {
 
     public insert<O>(other: Iterable<O>, at: number | bigint): Stream<T | O> {
         const usableAt = BigInt(at);
-        if (usableAt < 0)
+        if (usableAt < 0n)
             throw new Error(`at must be 0 or greater but ${at} was given`);
         const self = this;
         return Stream.iter(function* () {
@@ -402,73 +403,7 @@ export default class Stream<T> implements Iterable<T> {
         return Stream.of(merge(this, other));
     }
 
-    branch<A, B, R>(
-        branchA: (Stream: Stream<T>) => A,
-        branchB: (Stream: Stream<T>) => B,
-        reCombine: (resultA: A, resultB: B) => R
-    ): R;
-    branch<A, B, C, R>(
-        branchA: (Stream: Stream<T>) => A,
-        branchB: (Stream: Stream<T>) => B,
-        branchC: (Stream: Stream<T>) => C,
-        reCombine: (resultA: A, resultB: B, resultC: C) => R
-    ): R;
-    branch<A, B, C, D, R>(
-        branchA: (Stream: Stream<T>) => A,
-        branchB: (Stream: Stream<T>) => B,
-        branchC: (Stream: Stream<T>) => C,
-        branchD: (Stream: Stream<T>) => D,
-        reCombine: (resultA: A, resultB: B, resultC: C, resultD: D) => R
-    ): R;
-    branch<A, B, C, D, E, R>(
-        branchA: (Stream: Stream<T>) => A,
-        branchB: (Stream: Stream<T>) => B,
-        branchC: (Stream: Stream<T>) => C,
-        branchD: (Stream: Stream<T>) => D,
-        branchE: (Stream: Stream<T>) => E,
-        reCombine: (
-            resultA: A,
-            resultB: B,
-            resultC: C,
-            resultD: D,
-            resultE: E
-        ) => R
-    ): R;
-    branch<A, B, C, D, E, F, R>(
-        branchA: (Stream: Stream<T>) => A,
-        branchB: (Stream: Stream<T>) => B,
-        branchC: (Stream: Stream<T>) => C,
-        branchD: (Stream: Stream<T>) => D,
-        branchE: (Stream: Stream<T>) => E,
-        branchF: (Stream: Stream<T>) => F,
-        reCombine: (
-            resultA: A,
-            resultB: B,
-            resultC: C,
-            resultD: D,
-            resultE: E,
-            resultF: F
-        ) => R
-    ): R;
-    branch<A, B, C, D, E, F, G, R>(
-        branchA: (Stream: Stream<T>) => A,
-        branchB: (Stream: Stream<T>) => B,
-        branchC: (Stream: Stream<T>) => C,
-        branchD: (Stream: Stream<T>) => D,
-        branchE: (Stream: Stream<T>) => E,
-        branchF: (Stream: Stream<T>) => F,
-        branchG: (Stream: Stream<T>) => G,
-        reCombine: (
-            resultA: A,
-            resultB: B,
-            resultC: C,
-            resultD: D,
-            resultE: E,
-            resultF: F,
-            resultG: G
-        ) => R
-    ): R;
-    branch<A, B, C, D, E, F, G, H, R>(
+    public branch<A, B, C, D, E, F, G, H, R>(
         branchA: (Stream: Stream<T>) => A,
         branchB: (Stream: Stream<T>) => B,
         branchC: (Stream: Stream<T>) => C,
@@ -488,23 +423,87 @@ export default class Stream<T> implements Iterable<T> {
             resultH: H
         ) => R
     ): R;
-
-    branch<BranchResult, CombinationResult>(
-        ...branches: [
-            ...((stream: Stream<T>) => BranchResult)[],
-            (...results: BranchResult[]) => CombinationResult
+    public branch<A, B, C, D, E, F, G, R>(
+        branchA: (Stream: Stream<T>) => A,
+        branchB: (Stream: Stream<T>) => B,
+        branchC: (Stream: Stream<T>) => C,
+        branchD: (Stream: Stream<T>) => D,
+        branchE: (Stream: Stream<T>) => E,
+        branchF: (Stream: Stream<T>) => F,
+        branchG: (Stream: Stream<T>) => G,
+        reCombine: (
+            resultA: A,
+            resultB: B,
+            resultC: C,
+            resultD: D,
+            resultE: E,
+            resultF: F,
+            resultG: G
+        ) => R
+    ): R;
+    public branch<A, B, C, D, E, F, R>(
+        branchA: (Stream: Stream<T>) => A,
+        branchB: (Stream: Stream<T>) => B,
+        branchC: (Stream: Stream<T>) => C,
+        branchD: (Stream: Stream<T>) => D,
+        branchE: (Stream: Stream<T>) => E,
+        branchF: (Stream: Stream<T>) => F,
+        reCombine: (
+            resultA: A,
+            resultB: B,
+            resultC: C,
+            resultD: D,
+            resultE: E,
+            resultF: F
+        ) => R
+    ): R;
+    public branch<A, B, C, D, E, R>(
+        branchA: (Stream: Stream<T>) => A,
+        branchB: (Stream: Stream<T>) => B,
+        branchC: (Stream: Stream<T>) => C,
+        branchD: (Stream: Stream<T>) => D,
+        branchE: (Stream: Stream<T>) => E,
+        reCombine: (
+            resultA: A,
+            resultB: B,
+            resultC: C,
+            resultD: D,
+            resultE: E
+        ) => R
+    ): R;
+    public branch<A, B, C, D, R>(
+        branchA: (Stream: Stream<T>) => A,
+        branchB: (Stream: Stream<T>) => B,
+        branchC: (Stream: Stream<T>) => C,
+        branchD: (Stream: Stream<T>) => D,
+        reCombine: (resultA: A, resultB: B, resultC: C, resultD: D) => R
+    ): R;
+    public branch<A, B, C, R>(
+        branchA: (Stream: Stream<T>) => A,
+        branchB: (Stream: Stream<T>) => B,
+        branchC: (Stream: Stream<T>) => C,
+        reCombine: (resultA: A, resultB: B, resultC: C) => R
+    ): R;
+    public branch<A, B, R>(
+        branchA: (Stream: Stream<T>) => A,
+        branchB: (Stream: Stream<T>) => B,
+        reCombine: (resultA: A, resultB: B) => R
+    ): R;
+    public branch<BranchResult, CombinationResult>(
+        ...args: [
+            firstBranch: (stream: Stream<T>) => BranchResult,
+            ...otherBranchs: ((stream: Stream<T>) => BranchResult)[],
+            recombine: (...results: BranchResult[]) => CombinationResult
         ]
-    ): CombinationResult;
-
-    branch(...args: any[]): any {
+    ): CombinationResult {
         const stream = this.solidify();
 
         const results = [];
         for (let i = 0; i < args.length - 1; i++) {
-            results.push(args[i](stream));
+            results.push(args[i](stream as any));
         }
 
-        return args[args.length - 2](...results);
+        return (args[args.length - 1] as any)(...results);
     }
 
     public intersect(other: Iterable<T>): Stream<T> {
@@ -575,7 +574,9 @@ export default class Stream<T> implements Iterable<T> {
         return new Set(source);
     }
 
-
+    /**
+     * Streams are recalculated every time they are iterated in order to be consistent with the Stream's source. The method records the result of the stream and returns a new Stream of that recording. The returned stream no longer followws changes to the source of the original Stream and the original Stream won't be recalculated when the new Stream is iterated.
+     */
     public solidify(): Stream<T> {
         const source = this.getSource();
 
@@ -595,7 +596,11 @@ export default class Stream<T> implements Iterable<T> {
 
     public asMap(): T extends EntryLike<infer K, infer V>
         ? ReadonlyMap<K, V>
-        : never;
+        : T extends EntryLikeKey<infer K>
+        ? ReadonlyMap<K, unknown>
+        : T extends EntryLikeValue<infer V>
+        ? ReadonlyMap<unknown, V>
+        : ReadonlyMap<unknown, unknown>;
 
     public asMap<K>(
         keySelector: (value: T, index: number) => K
@@ -631,8 +636,12 @@ export default class Stream<T> implements Iterable<T> {
     }
 
     public toMap(): T extends EntryLike<infer K, infer V>
-        ? ReadonlyMap<K, V>
-        : never;
+        ? Map<K, V>
+        : T extends EntryLikeKey<infer K>
+        ? Map<K, unknown>
+        : T extends EntryLikeValue<infer V>
+        ? Map<unknown, V>
+        : Map<unknown, unknown>;
 
     public toMap<K>(
         keySelector: (value: T, index: number) => K
@@ -902,7 +911,7 @@ export default class Stream<T> implements Iterable<T> {
     public getNonIteratedCountOrUndefined(): number | undefined {
         return getNonIteratedCountOrUndefined(this.getSource());
     }
-    
+
     public then<R>(action: (stream: this) => R) {
         return action(this);
     }
@@ -912,15 +921,26 @@ export default class Stream<T> implements Iterable<T> {
  * A {@link Stream} ordered by a collection of Comparators. Use {@link OrderedStream.thenBy} to add more comparators to sort by.
  */
 export class OrderedStream<T> extends Stream<T> {
-    private readonly orderedBy: Comparator<T>[];
+    protected readonly orderedBy: readonly Comparator<T>[];
+    protected readonly getUnorderedSource: () => Iterable<T>;
+    protected readonly sourceProperties: {
+        oneOff?: true;
+        getPreOrderedSource?: () => Iterable<T>;
+    };
 
     public constructor(
         getSource: () => Iterable<T>,
         orderedBy: Iterable<Order<T>>,
-        sourceProperties: { oneOff?: true } = {}
+        sourceProperties: {
+            oneOff?: true;
+            getPreOrderedSource?: () => Iterable<T>;
+        } = {}
     ) {
         super(
             () => {
+                if (sourceProperties.getPreOrderedSource !== undefined)
+                    return sourceProperties.getPreOrderedSource();
+
                 const source = getSource();
                 const sorted: T[] =
                     sourceProperties.oneOff && isArray(source)
@@ -930,9 +950,16 @@ export class OrderedStream<T> extends Stream<T> {
                 sorted.sort((a, b) => multiCompare(a, b, this.orderedBy));
                 return sorted;
             },
-            { oneOff: true }
+            {
+                oneOff:
+                    sourceProperties.getPreOrderedSource === undefined
+                        ? true
+                        : undefined,
+            }
         );
+        this.getUnorderedSource = getSource;
         this.orderedBy = [...orderedBy];
+        this.sourceProperties = sourceProperties;
     }
 
     public static empty<T>(
@@ -966,7 +993,7 @@ export class OrderedStream<T> extends Stream<T> {
     public thenBy(parameter: (value: T) => any): OrderedStream<T>;
     public thenBy(order: Order<T>): OrderedStream<T> {
         return new OrderedStream(
-            this.getSource,
+            this.getUnorderedSource,
             append(this.orderedBy, order),
             this.sourceProperties
         );
@@ -978,85 +1005,7 @@ export class OrderedStream<T> extends Stream<T> {
         return this.thenBy(reverseOrder(order));
     }
 
-    public solidify(): OrderedStream<T> {
-        return new OrderedStream(
-            () => {
-                const source = this.getSource();
-                if (isSolid(source)) return source;
-                return [...source];
-            },
-            this.orderedBy,
-            this.sourceProperties
-        );
-    }
-
-    branch<A, B, R>(
-        branchA: (Stream: OrderedStream<T>) => A,
-        branchB: (Stream: OrderedStream<T>) => B,
-        reCombine: (resultA: A, resultB: B) => R
-    ): R;
-    branch<A, B, C, R>(
-        branchA: (Stream: OrderedStream<T>) => A,
-        branchB: (Stream: OrderedStream<T>) => B,
-        branchC: (Stream: OrderedStream<T>) => C,
-        reCombine: (resultA: A, resultB: B, resultC: C) => R
-    ): R;
-    branch<A, B, C, D, R>(
-        branchA: (Stream: OrderedStream<T>) => A,
-        branchB: (Stream: OrderedStream<T>) => B,
-        branchC: (Stream: OrderedStream<T>) => C,
-        branchD: (Stream: OrderedStream<T>) => D,
-        reCombine: (resultA: A, resultB: B, resultC: C, resultD: D) => R
-    ): R;
-    branch<A, B, C, D, E, R>(
-        branchA: (Stream: OrderedStream<T>) => A,
-        branchB: (Stream: OrderedStream<T>) => B,
-        branchC: (Stream: OrderedStream<T>) => C,
-        branchD: (Stream: OrderedStream<T>) => D,
-        branchE: (Stream: OrderedStream<T>) => E,
-        reCombine: (
-            resultA: A,
-            resultB: B,
-            resultC: C,
-            resultD: D,
-            resultE: E
-        ) => R
-    ): R;
-    branch<A, B, C, D, E, F, R>(
-        branchA: (Stream: OrderedStream<T>) => A,
-        branchB: (Stream: OrderedStream<T>) => B,
-        branchC: (Stream: OrderedStream<T>) => C,
-        branchD: (Stream: OrderedStream<T>) => D,
-        branchE: (Stream: OrderedStream<T>) => E,
-        branchF: (Stream: OrderedStream<T>) => F,
-        reCombine: (
-            resultA: A,
-            resultB: B,
-            resultC: C,
-            resultD: D,
-            resultE: E,
-            resultF: F
-        ) => R
-    ): R;
-    branch<A, B, C, D, E, F, G, R>(
-        branchA: (Stream: OrderedStream<T>) => A,
-        branchB: (Stream: OrderedStream<T>) => B,
-        branchC: (Stream: OrderedStream<T>) => C,
-        branchD: (Stream: OrderedStream<T>) => D,
-        branchE: (Stream: OrderedStream<T>) => E,
-        branchF: (Stream: OrderedStream<T>) => F,
-        branchG: (Stream: OrderedStream<T>) => G,
-        reCombine: (
-            resultA: A,
-            resultB: B,
-            resultC: C,
-            resultD: D,
-            resultE: E,
-            resultF: F,
-            resultG: G
-        ) => R
-    ): R;
-    branch<A, B, C, D, E, F, G, H, R>(
+    public branch<A, B, C, D, E, F, G, H, R>(
         branchA: (Stream: OrderedStream<T>) => A,
         branchB: (Stream: OrderedStream<T>) => B,
         branchC: (Stream: OrderedStream<T>) => C,
@@ -1076,22 +1025,89 @@ export class OrderedStream<T> extends Stream<T> {
             resultH: H
         ) => R
     ): R;
-
-    branch<BranchResult, CombinationResult>(
-        ...branches: [
-            ...((stream: OrderedStream<T>) => BranchResult)[],
-            (...results: BranchResult[]) => CombinationResult
+    public branch<A, B, C, D, E, F, G, R>(
+        branchA: (Stream: OrderedStream<T>) => A,
+        branchB: (Stream: OrderedStream<T>) => B,
+        branchC: (Stream: OrderedStream<T>) => C,
+        branchD: (Stream: OrderedStream<T>) => D,
+        branchE: (Stream: OrderedStream<T>) => E,
+        branchF: (Stream: OrderedStream<T>) => F,
+        branchG: (Stream: OrderedStream<T>) => G,
+        reCombine: (
+            resultA: A,
+            resultB: B,
+            resultC: C,
+            resultD: D,
+            resultE: E,
+            resultF: F,
+            resultG: G
+        ) => R
+    ): R;
+    public branch<A, B, C, D, E, F, R>(
+        branchA: (Stream: OrderedStream<T>) => A,
+        branchB: (Stream: OrderedStream<T>) => B,
+        branchC: (Stream: OrderedStream<T>) => C,
+        branchD: (Stream: OrderedStream<T>) => D,
+        branchE: (Stream: OrderedStream<T>) => E,
+        branchF: (Stream: OrderedStream<T>) => F,
+        reCombine: (
+            resultA: A,
+            resultB: B,
+            resultC: C,
+            resultD: D,
+            resultE: E,
+            resultF: F
+        ) => R
+    ): R;
+    public branch<A, B, C, D, E, R>(
+        branchA: (Stream: OrderedStream<T>) => A,
+        branchB: (Stream: OrderedStream<T>) => B,
+        branchC: (Stream: OrderedStream<T>) => C,
+        branchD: (Stream: OrderedStream<T>) => D,
+        branchE: (Stream: OrderedStream<T>) => E,
+        reCombine: (
+            resultA: A,
+            resultB: B,
+            resultC: C,
+            resultD: D,
+            resultE: E
+        ) => R
+    ): R;
+    public branch<A, B, C, D, R>(
+        branchA: (Stream: OrderedStream<T>) => A,
+        branchB: (Stream: OrderedStream<T>) => B,
+        branchC: (Stream: OrderedStream<T>) => C,
+        branchD: (Stream: OrderedStream<T>) => D,
+        reCombine: (resultA: A, resultB: B, resultC: C, resultD: D) => R
+    ): R;
+    public branch<A, B, C, R>(
+        branchA: (Stream: OrderedStream<T>) => A,
+        branchB: (Stream: OrderedStream<T>) => B,
+        branchC: (Stream: OrderedStream<T>) => C,
+        reCombine: (resultA: A, resultB: B, resultC: C) => R
+    ): R;
+    public branch<A, B, R>(
+        branchA: (Stream: OrderedStream<T>) => A,
+        branchB: (Stream: OrderedStream<T>) => B,
+        reCombine: (resultA: A, resultB: B) => R
+    ): R;
+    public branch<BranchResult, CombinationResult>(
+        ...args: [
+            firstBranch: (stream: OrderedStream<T>) => BranchResult,
+            ...otherBranchs: ((stream: OrderedStream<T>) => BranchResult)[],
+            recombine: (...results: BranchResult[]) => CombinationResult
         ]
-    ): CombinationResult;
-
-    branch(...args: any[]): any {
-        const stream = this.solidify();
+    ): CombinationResult {
+        const ordered = this.solidify();
+        const stream = new OrderedStream(() => ordered, this.orderedBy, {
+            getPreOrderedSource: () => ordered,
+        });
 
         const results = [];
         for (let i = 0; i < args.length - 1; i++) {
-            results.push(args[i](stream));
+            results.push(args[i](stream as any));
         }
 
-        return args[args.length - 2](...results);
+        return (args[args.length - 1] as any)(...results);
     }
 }

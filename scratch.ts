@@ -76,10 +76,19 @@ async function main() {
                     })
                 )
 
-                .filter(c => c.purchases.length > 1)
+                // .filter(c => c.purchases.length > 1)
+
                 .orderBy(c => c.gender)
                 .thenBy(c => c.purchases.length)
                 .thenBy(c => c.first_name)
+                .thenBy(c => c.last_name)
+                .thenBy(c => c.id)
+                .branch(
+                    s => s.filter(c => c.purchases.length === 0),
+                    s => s.filter(c => c.purchases.length < 3 && c.purchases.length !== 0),
+                    (a, b) => a.concat(b)
+                )
+                .alternate(10)
                 .map(
                     c =>
                         c.gender +
@@ -89,6 +98,7 @@ async function main() {
                         c.purchases.length +
                         " things"
                 )
+                
                 .asArray(),
             false,
             null,
