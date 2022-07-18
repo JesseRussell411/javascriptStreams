@@ -944,8 +944,7 @@ export class OrderedStream<T> extends Stream<T> {
     ) {
         super(
             () => {
-                if (sourceProperties.alreadySorted)
-                    return this.originalGetSource();
+                if (sourceProperties.alreadySorted) return getSource();
 
                 const source = getSource();
                 const sorted: T[] =
@@ -953,7 +952,7 @@ export class OrderedStream<T> extends Stream<T> {
                         ? (source as T[])
                         : [...source];
 
-                sorted.sort((a, b) => multiCompare(a, b, this.orderedBy));
+                sorted.sort((a, b) => multiCompare(a, b, orderedBy));
                 return sorted;
             },
             {

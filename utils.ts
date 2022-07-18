@@ -318,8 +318,8 @@ export function smartCompare(
 }
 
 export type Comparator<T> = (a: T, b: T) => number;
-export type keySelector<T, K> = (value: T) => K;
-export type Order<T> = keySelector<T, any> | Comparator<T>;
+export type KeySelector<T, K> = (value: T) => K;
+export type Order<T> = KeySelector<T, any> | Comparator<T>;
 
 export function reverseOrder<T>(order: Order<T>): Comparator<T> {
     if (orderIsComparator(order)) {
@@ -337,19 +337,27 @@ export function orderAsComparator<T>(
 }
 
 export function keySelectorToComparator<T>(
-    keySelector: (value: T) => any
+    keySelector: KeySelector<T, any>
 ): Comparator<T> {
-    return (a, b) => smartCompare(keySelector(a), keySelector(b));
+    return (a, b) => compareByKeySelector(keySelector, a, b);
 }
 
-export function compareByOrder<T>(a: T, b: T, order: Order<T>) {
+export function compareByOrder<T>(order: Order<T>, a: T, b: T) {
     if (orderIsComparator(order)) return order(a, b);
-    return smartCompare(order(a), order(b));
+    return compareByKeySelector(order, a, b);
+}
+
+export function compareByKeySelector<T>(
+    keySelector: KeySelector<T, any>,
+    a: T,
+    b: T
+) {
+    return smartCompare(keySelector(a), keySelector(b));
 }
 
 export function orderIsKeySelector<T>(
     order: Order<T>
-): order is (value: T) => any {
+): order is KeySelector<T, any> {
     return !orderIsComparator(order);
 }
 
@@ -359,7 +367,7 @@ export function orderIsComparator<T>(order: Order<T>): order is Comparator<T> {
 
 export function multiCompare<T>(a: T, b: T, orders: Iterable<Order<T>>) {
     for (const order of orders) {
-        const comp = compareByOrder(a, b, order);
+        const comp = compareByOrder(order, a, b);
 
         if (comp !== 0) return comp;
     }
