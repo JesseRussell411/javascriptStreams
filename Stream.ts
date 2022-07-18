@@ -48,6 +48,7 @@ import {
     Solid,
     isSolid,
     asSolid,
+    bigintComparator,
 } from "./utils";
 
 export interface StreamSourceProperties<T> {
@@ -122,12 +123,11 @@ export default class Stream<T> implements Iterable<T> {
     public static range(end: number | bigint): Stream<number>;
 
     public static range(arg1: any, arg2?: any, arg3?: any): any {
-        // return Stream.of(range(arg1, arg2, arg3));
         return new Stream(() => range(arg1, arg2, arg3), { immutable: true });
     }
 
     public static generate<T>(from: () => T, length: number | bigint) {
-        return Stream.from(() => generate(from, length));
+        return Stream.of(generate(from, length));
     }
 
     /** @returns An iterator over the Stream. */
@@ -178,24 +178,17 @@ export default class Stream<T> implements Iterable<T> {
         return new Stream(
             () =>
                 iter(function* () {
-                    const source = self.getSource();
+                    const cache: T[] = [];
 
-                    if (isSolid(source)) {
-                        for (let i = 0n; i < usableTimes; i++)
-                            for (const value of source) yield value;
-                    } else {
-                        const cache: T[] = [];
-
-                        let i = 0n;
-                        if (i < usableTimes) {
-                            for (const value of source) {
-                                cache.push(value);
-                                yield value;
-                            }
-                            i++;
-                            for (; i < usableTimes; i++)
-                                for (const value of cache) yield value;
+                    let i = 0n;
+                    if (i < usableTimes) {
+                        for (const value of self) {
+                            cache.push(value);
+                            yield value;
                         }
+                        i++;
+                        for (; i < usableTimes; i++)
+                            for (const value of cache) yield value;
                     }
                 }),
             { immutable: this.sourceProperties.immutable }
@@ -298,9 +291,7 @@ export default class Stream<T> implements Iterable<T> {
     }
 
     /**
-     * Takes the values in the start of the Stream that pass the given test. All values following and including the first value that does not pass the test are ommitted.
-     * @param test Returns true if the value passes and false if it fails.
-     * @returns A Stream over the first values in the original Stream that pass the given test.
+     * Iterates over the Stream, stopping at the first value to fail the test.
      */
     public takeWhile(test: (value: T, index: number) => boolean) {
         const self = this;
@@ -317,13 +308,21 @@ export default class Stream<T> implements Iterable<T> {
         );
     }
 
+    /**
+     * Iterates over the Stream, starting at the first value to fail the test.
+     */
     public skipWhile(test: (value: T, index: number) => boolean) {
         const self = this;
         return new Stream(
             () =>
                 iter(function* () {
                     let index = 0;
-                    for (const value of self) if (test(value, index++)) break;
+                    for (const value of self)
+                        if (test(value, index++)) {
+                            yield value;
+                            break;
+                        }
+
                     for (const value of self) yield value;
                 }),
             { immutable: this.sourceProperties.immutable }
@@ -366,7 +365,7 @@ export default class Stream<T> implements Iterable<T> {
         });
     }
 
-    public insertValue(value: T, at: number | bigint) {
+    public insertSingle(value: T, at: number | bigint) {
         const usableAt = BigInt(at);
         if (usableAt < 0n)
             throw new Error(`at must be 0 or greater but ${at} was given`);
@@ -425,7 +424,49 @@ export default class Stream<T> implements Iterable<T> {
         );
     }
 
-    public alternate(interval: number | bigint = 2): Stream<T> {
+    /**
+     * Removes a number of values from the Stream.
+     * @param start Where to start the removal.
+     * @param deleteCount How many values to remvoe.
+     */
+    public splice(start: number | bigint, deleteCount: number | bigint) {
+        const useableStart = BigInt(start);
+        const useableDeleteCount = BigInt(start);
+        if (useableStart < 0n)
+            throw new Error(
+                `start must be 0 or greater but ${start} was given`
+            );
+        if (useableDeleteCount < 0n)
+            throw new Error(
+                `deleteCount must be 0 or greater but ${deleteCount} was given`
+            );
+
+        const self = this;
+        return new Stream(
+            () =>
+                iter(function* () {
+                    const iter = self[Symbol.iterator]();
+                    let next;
+                    for (
+                        let i = 0n;
+                        i < useableStart && !(next = iter.next()).done;
+                        i++
+                    )
+                        yield next.value;
+
+                    for (
+                        let i = 0n;
+                        i < useableDeleteCount && !(next = iter.next()).done;
+                        i++
+                    );
+
+                    while (!(next = iter.next()).done) yield next.value;
+                }),
+            this.sourceProperties
+        );
+    }
+
+    public alternate(interval: number | bigint = 2n): Stream<T> {
         const usableInterval = BigInt(interval);
         if (usableInterval < 1)
             throw new Error(
@@ -449,11 +490,14 @@ export default class Stream<T> implements Iterable<T> {
     }
 
     public shuffle(): Stream<T> {
-        return new Stream(() => {
-            const array = this.toArray();
-            shuffle(array);
-            return array;
-        }, {});
+        return new Stream(
+            () => {
+                const array = this.toArray();
+                shuffle(array);
+                return array;
+            },
+            { oneOff: true }
+        );
     }
 
     public append(value: T) {
@@ -534,7 +578,7 @@ export default class Stream<T> implements Iterable<T> {
 
     public toArray(): T[] {
         const source = this.getSource();
-        if (this.sourceProperties.oneOff && isArray(source))
+        if (this.sourceProperties.oneOff && Array.isArray(source))
             return source as T[];
 
         return [...source];
@@ -542,14 +586,14 @@ export default class Stream<T> implements Iterable<T> {
 
     public toSet(): Set<T> {
         const source = this.getSource();
-        if (this.sourceProperties.oneOff && isSet(source))
+        if (this.sourceProperties.oneOff && source instanceof Set)
             return source as Set<T>;
 
         return new Set(source);
     }
 
     /**
-     * Streams are recalculated every time they are iterated in order to be consistent with the Stream's source. The method records the result of the stream and returns a new Stream of that recording. The returned stream no longer followws changes to the source of the original Stream and the original Stream won't be recalculated when the new Stream is iterated.
+     * Normally Streams are recalculated every time they are iterated in order to be consistent with the Stream's source. The method records the result of the stream and returns a new Stream of that recording. The returned stream no longer followws changes to the source of the original Stream and the original Stream won't be recalculated when the new Stream is iterated.
      */
     public solidify(): Stream<T> {
         const solid = this.asSolid();
