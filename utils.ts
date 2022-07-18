@@ -613,6 +613,31 @@ export function excluding<T>(
     });
 }
 
+export function indexBy<T, K, V>(
+    collection: Iterable<T>,
+    keySelector: (value: T, index: number) => K
+): Map<K, T>;
+export function indexBy<T, K, V>(
+    collection: Iterable<T>,
+    keySelector: (value: T, index: number) => K,
+    valueSelector: (value: T, index: number) => V
+): Map<K, V>;
+
+export function indexBy<T, K>(
+    collection: Iterable<T>,
+    keySelector: (value: T, index: number) => K,
+    valueSelector: (value: T, index: number) => any = value => value
+) {
+    const index = new Map<K, any>();
+
+    let i = 0;
+    for (const value of collection) {
+        index.set(keySelector(value, i), valueSelector(value, i));
+        i++;
+    }
+    return index;
+}
+
 export function groupBy<T, K, V>(
     collection: Iterable<T>,
     keySelector: (value: T, index: number) => K,
@@ -656,10 +681,10 @@ export function groupJoin<O, I, K, R>(
     return iter(function* () {
         const innerGrouped = groupBy(inner, innerKeySelector);
         let index = 0;
-        for (const value of outer) {
-            const key = outerKeySelector(value);
+        for (const outerValue of outer) {
+            const key = outerKeySelector(outerValue);
             const inner = innerGrouped.get(key);
-            yield resultSelector(value, inner ?? []);
+            yield resultSelector(outerValue, inner ?? []);
         }
     });
 }

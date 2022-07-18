@@ -50,17 +50,24 @@ import {
     asSolid,
 } from "./utils";
 
+export interface StreamSourceProperties {
+    oneOff?: true;
+}
+export type OrderedStreamSourceProperties = StreamSourceProperties & {
+    alreadySorted?: true;
+};
+
 export function stream<T>(...values: T[]): Stream<T> {
     return Stream.of(values);
 }
 
 export default class Stream<T> implements Iterable<T> {
     protected readonly getSource: () => Iterable<T>;
-    protected readonly sourceProperties: { oneOff?: true };
+    protected readonly sourceProperties: StreamSourceProperties;
 
     public constructor(
         getSource: () => Iterable<T>,
-        sourceProperties: { oneOff?: true } = {}
+        sourceProperties: StreamSourceProperties = {}
     ) {
         this.sourceProperties = sourceProperties;
         this.getSource = getSource;
@@ -489,14 +496,23 @@ export default class Stream<T> implements Iterable<T> {
         branchB: (Stream: Stream<T>) => B,
         reCombine: (resultA: A, resultB: B) => R
     ): R;
+    public branch<A, R>(
+        branchA: (Stream: Stream<T>) => A,
+        reCombine: (resultA: A) => R
+    ): R;
+    public branch(): Stream<T>;
     public branch<BranchResult, CombinationResult>(
         ...args: [
             firstBranch: (stream: Stream<T>) => BranchResult,
-            ...otherBranchs: ((stream: Stream<T>) => BranchResult)[],
+            ...otherBranches: ((stream: Stream<T>) => BranchResult)[],
             recombine: (...results: BranchResult[]) => CombinationResult
         ]
-    ): CombinationResult {
+    ): CombinationResult;
+
+    public branch(...args: any[]) {
         const stream = this.solidify();
+
+        if (args.length < 2) return stream;
 
         const results = [];
         for (let i = 0; i < args.length - 1; i++) {
@@ -836,10 +852,6 @@ export default class Stream<T> implements Iterable<T> {
 
         if (_count === undefined) {
             return random.choice(this.asSolid());
-            const array = this.asArray();
-            if (array.length === 0)
-                throw new Error("no values to choose a random value from");
-            return array[Math.trunc(Math.random() * array.length)];
         } else {
             const self = this;
             return Stream.iter(function* () {
@@ -922,28 +934,22 @@ export default class Stream<T> implements Iterable<T> {
  */
 export class OrderedStream<T> extends Stream<T> {
     protected readonly orderedBy: readonly Comparator<T>[];
-    protected readonly getUnorderedSource: () => Iterable<T>;
-    protected readonly sourceProperties: {
-        oneOff?: true;
-        getPreOrderedSource?: () => Iterable<T>;
-    };
+    protected readonly originalGetSource: () => Iterable<T>;
+    protected readonly sourceProperties: OrderedStreamSourceProperties;
 
     public constructor(
         getSource: () => Iterable<T>,
         orderedBy: Iterable<Order<T>>,
-        sourceProperties: {
-            oneOff?: true;
-            getPreOrderedSource?: () => Iterable<T>;
-        } = {}
+        sourceProperties: OrderedStreamSourceProperties = {}
     ) {
         super(
             () => {
-                if (sourceProperties.getPreOrderedSource !== undefined)
-                    return sourceProperties.getPreOrderedSource();
+                if (sourceProperties.alreadySorted)
+                    return this.originalGetSource();
 
                 const source = getSource();
                 const sorted: T[] =
-                    sourceProperties.oneOff && isArray(source)
+                    sourceProperties.oneOff && Array.isArray(source)
                         ? (source as T[])
                         : [...source];
 
@@ -952,22 +958,30 @@ export class OrderedStream<T> extends Stream<T> {
             },
             {
                 oneOff:
-                    sourceProperties.getPreOrderedSource === undefined
+                    sourceProperties.alreadySorted === undefined
                         ? true
-                        : undefined,
+                        : sourceProperties.oneOff,
             }
         );
-        this.getUnorderedSource = getSource;
+        this.originalGetSource = getSource;
         this.orderedBy = [...orderedBy];
         this.sourceProperties = sourceProperties;
     }
 
+    /**
+     * @returns An empty OrderedStream of the given type and order.
+     * @param orderedBy Describes the order of the returned Stream.
+     */
     public static empty<T>(
         orderedBy: Iterable<Order<T>> = []
     ): OrderedStream<T> {
         return new OrderedStream<T>(() => [], orderedBy);
     }
 
+    /**
+     * @returns An OrderedSteam of the given source and order.
+     * @param orderedBy Described the order of the returned Stream.
+     */
     public static of<T>(
         source: Iterable<T>,
         orderedBy: Iterable<Order<T>> = []
@@ -975,6 +989,10 @@ export class OrderedStream<T> extends Stream<T> {
         return new OrderedStream(() => source ?? [], orderedBy);
     }
 
+    /**
+     * @returns A stream of the source from the given source-getter function. Note that the function will be called every time the Stream is iterated to generate a new source.
+     * @param orderedBy Defines the order of the returned Stream.
+     */
     public static from<T>(
         sourceGetter: () => Iterable<T>,
         orderedBy: Iterable<Order<T>> = []
@@ -993,7 +1011,7 @@ export class OrderedStream<T> extends Stream<T> {
     public thenBy(parameter: (value: T) => any): OrderedStream<T>;
     public thenBy(order: Order<T>): OrderedStream<T> {
         return new OrderedStream(
-            this.getUnorderedSource,
+            this.originalGetSource,
             append(this.orderedBy, order),
             this.sourceProperties
         );
@@ -1091,17 +1109,26 @@ export class OrderedStream<T> extends Stream<T> {
         branchB: (Stream: OrderedStream<T>) => B,
         reCombine: (resultA: A, resultB: B) => R
     ): R;
+    public branch<A, R>(
+        branchA: (Stream: OrderedStream<T>) => A,
+        reCombine: (resultA: A) => R
+    ): R;
+    public branch(): OrderedStream<T>;
     public branch<BranchResult, CombinationResult>(
         ...args: [
             firstBranch: (stream: OrderedStream<T>) => BranchResult,
-            ...otherBranchs: ((stream: OrderedStream<T>) => BranchResult)[],
+            ...otherBranches: ((stream: OrderedStream<T>) => BranchResult)[],
             recombine: (...results: BranchResult[]) => CombinationResult
         ]
-    ): CombinationResult {
+    ): CombinationResult;
+
+    public branch(...args: any[]) {
         const ordered = this.solidify();
         const stream = new OrderedStream(() => ordered, this.orderedBy, {
-            getPreOrderedSource: () => ordered,
+            alreadySorted: true,
         });
+
+        if (args.length < 2) return stream;
 
         const results = [];
         for (let i = 0; i < args.length - 1; i++) {
