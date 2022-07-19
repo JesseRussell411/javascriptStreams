@@ -1,6 +1,6 @@
 import Stream from "./Stream";
 import { and } from "./logic";
-import { StreamableArray } from "./streamable";
+import { StreamableArray } from "./Streamable";
 
 export function eager<T>(result: T): () => T {
     return () => result;

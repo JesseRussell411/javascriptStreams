@@ -1,5 +1,6 @@
+import { ReadStream } from "fs";
 import { and, or } from "./logic";
-import { Streamable, StreamableArray, StreamableTuple } from "./streamable";
+import { Streamable, StreamableArray, StreamableTuple } from "./Streamable";
 import {
     lazy,
     iter,
@@ -80,21 +81,6 @@ export default class Stream<T> implements Iterable<T> {
     ) {
         this.sourceProperties = sourceProperties;
         this.getSource = getSource;
-        const asArrayBase = () => asArray(getSource());
-        const asSetBase = () => asSet(getSource());
-        const asMapParameterlessBase = () => asMap(getSource());
-        const asSolidBase = () => asSolid(getSource());
-        if (this.sourceProperties.immutable) {
-            this.asArray = lazy(asArrayBase);
-            this.asSet = lazy(asSetBase);
-            this.asMapParameterless = lazy(asMapParameterlessBase);
-            this.asSolid = lazy(asSolidBase);
-        } else {
-            this.asArray = asArrayBase;
-            this.asSet = asSetBase;
-            this.asMapParameterless = asMapParameterlessBase;
-            this.asSolid = asSolidBase;
-        }
     }
 
     public static empty<T>(): Stream<T> {
@@ -658,20 +644,40 @@ export default class Stream<T> implements Iterable<T> {
         return [...source];
     }
 
-    public readonly asArray: () => readonly T[];
+    private cache_asArray?: readonly T[];
+    public asArray() {
+        if (this.sourceProperties.immutable) {
+            if (this.cache_asArray === undefined)
+                this.cache_asArray = asArray(this.getSource());
+        }
+        return asArray(this.getSource());
+    }
 
-    public readonly asSet: () => ReadonlySet<T>;
+    private cache_asSet?: ReadonlySet<T>;
+    public asSet() {
+        if (this.sourceProperties.immutable) {
+            if (this.cache_asSet === undefined)
+                this.cache_asSet = asSet(this.getSource());
+            return this.cache_asSet;
+        }
+        return asSet(this.getSource());
+    }
 
-    private readonly asMapParameterless: () => T extends EntryLike<
-        infer K,
-        infer V
-    >
+    private cache_asMapParameterless?: ReadonlyMap<any, any>;
+    private asMapParameterless(): T extends EntryLike<infer K, infer V>
         ? ReadonlyMap<K, V>
         : T extends EntryLikeKey<infer K>
         ? ReadonlyMap<K, unknown>
         : T extends EntryLikeValue<infer V>
         ? ReadonlyMap<unknown, V>
-        : ReadonlyMap<unknown, unknown>;
+        : ReadonlyMap<unknown, unknown> {
+        if (this.sourceProperties.immutable) {
+            if (this.cache_asMapParameterless === undefined)
+                this.cache_asMapParameterless = asMap(this.getSource());
+            return this.cache_asMapParameterless as any;
+        }
+        return asMap(this.getSource());
+    }
 
     public asMap(): T extends EntryLike<infer K, infer V>
         ? ReadonlyMap<K, V>
@@ -708,7 +714,15 @@ export default class Stream<T> implements Iterable<T> {
         );
     }
 
-    public readonly asSolid: () => ReadonlySolid<T>;
+    private cache_asSolid?: ReadonlySolid<T>;
+    public asSolid(): ReadonlySolid<T> {
+        if (this.sourceProperties.immutable) {
+            if (this.cache_asSolid === undefined)
+                this.cache_asSolid = asSolid(this.getSource());
+            return this.cache_asSolid;
+        }
+        return asSolid(this.getSource());
+    }
 
     /** Normally Streams are recalculated every iteration in order to stay consistent with the Stream's source. This method records the result of the stream and returns a new Stream of that recording. The returned Stream no longer follows changes to the original source and iterating the new Stream doesn't iterate the original Stream. The copy of the Stream is made at call time. For lazy execution use {@link lazySolidify}. */
     public solidify(): Stream<T> {
