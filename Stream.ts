@@ -335,6 +335,76 @@ export default class Stream<T> implements Iterable<T> {
         return this.skipWhile((_, index) => index < usableCount);
     }
 
+    public takeAlternating(interval: number | bigint = 2n): Stream<T> {
+        return new Stream(
+            eager(takeAlternating(this, interval)),
+            this.sourceProperties
+        );
+    }
+
+    public skipAlternating(interval: number | bigint = 2n): Stream<T> {
+        return new Stream(
+            eager(skipAlternating(this, interval)),
+            this.sourceProperties
+        );
+    }
+
+    public takeSparse(count: number | bigint) {
+        const usableCount = BigInt(count);
+        if (count < 0)
+            throw new Error(
+                `count must be 0 or greater but ${count} was given`
+            );
+        if (count === 0) return Stream.empty<T>();
+        const self = this;
+        return new Stream(() => {
+            const solid = this.asSolid();
+            const count = getNonIteratedCount(solid);
+            return takeAlternating(solid, BigInt(count) / usableCount);
+        }, this.sourceProperties);
+    }
+
+    public skipSparse(count: number | bigint) {
+        const usableCount = BigInt(count);
+        if (count < 0)
+            throw new Error(
+                `count must be 0 or greater but ${count} was given`
+            );
+        if (count === 0) return this;
+        const self = this;
+        return new Stream(() => {
+            const solid = this.asSolid();
+            const count = getNonIteratedCount(solid);
+            return skipAlternating(solid, BigInt(count) / usableCount);
+        }, this.sourceProperties);
+    }
+
+    public takeRandom(count: number | bigint): Stream<T> {
+        if (BigInt(count) < 0n || Number(count) < 0)
+            throw new Error(
+                `count must be 0 or greater but ${count} was given`
+            );
+        return this.shuffle().take(count);
+    }
+
+    public skipRandom(count: number | bigint): Stream<T> {
+        const usableCount = BigInt(count);
+        if (usableCount < 0n)
+            throw new Error(
+                `count must be 0 or greater but ${count} was given`
+            );
+        return new Stream(
+            () => {
+                const array = this.toArray();
+                for (let i = 0n; i < usableCount && array.length > 0; i++)
+                    random.chooseAndRemove(array);
+
+                return array;
+            },
+            { oneOff: true }
+        );
+    }
+
     public concat<O>(other: Iterable<O>): Stream<T | O> {
         const self = this;
         return Stream.iter(function* () {
@@ -455,50 +525,7 @@ export default class Stream<T> implements Iterable<T> {
         );
     }
 
-    public takeAlternating(interval: number | bigint = 2n): Stream<T> {
-        return new Stream(
-            eager(takeAlternating(this, interval)),
-            this.sourceProperties
-        );
-    }
-
-    public skipAlternating(interval: number | bigint = 2n): Stream<T> {
-        return new Stream(
-            eager(skipAlternating(this, interval)),
-            this.sourceProperties
-        );
-    }
-
-    public takeSparse(count: number | bigint) {
-        const usableCount = BigInt(count);
-        if (count < 0)
-            throw new Error(
-                `count must be 0 or greater but ${count} was given`
-            );
-        if (count === 0) return Stream.empty<T>();
-        const self = this;
-        return new Stream(() => {
-            const solid = this.asSolid();
-            const count = getNonIteratedCount(solid);
-            return takeAlternating(solid, BigInt(count) / usableCount);
-        }, this.sourceProperties);
-    }
-
-    public skipSparse(count: number | bigint) {
-        const usableCount = BigInt(count);
-        if (count < 0)
-            throw new Error(
-                `count must be 0 or greater but ${count} was given`
-            );
-        if (count === 0) return this;
-        const self = this;
-        return new Stream(() => {
-            const solid = this.asSolid();
-            const count = getNonIteratedCount(solid);
-            return skipAlternating(solid, BigInt(count) / usableCount);
-        }, this.sourceProperties);
-    }
-
+    /** @returns A Stream over the orignal Stream in random order. */
     public shuffle(): Stream<T> {
         return new Stream(
             () => {
@@ -523,66 +550,126 @@ export default class Stream<T> implements Iterable<T> {
     }
 
     public with(needed: Iterable<T>): Stream<T> {
-        return Stream.from(eager(including(this, needed)));
+        return new Stream(eager(including(this, needed)), {
+            immutable:
+                this.sourceProperties.immutable &&
+                needed instanceof Stream &&
+                needed.sourceProperties.immutable,
+        });
     }
 
     public without(remove: Iterable<T>): Stream<T> {
-        return Stream.from(eager(excluding(this, remove)));
+        return new Stream(eager(excluding(this, remove)), {
+            immutable:
+                this.sourceProperties.immutable &&
+                remove instanceof Stream &&
+                remove.sourceProperties.immutable,
+        });
     }
 
     public merge<O>(other: Iterable<O>): Stream<T | O> {
-        return Stream.of(merge(this, other));
+        return new Stream(eager(merge(this, other)), {
+            immutable:
+                this.sourceProperties.immutable &&
+                other instanceof Stream &&
+                other.sourceProperties.immutable,
+        });
     }
 
     public intersect(other: Iterable<T>): Stream<T> {
-        return Stream.from(() => intersection(this.getSource(), other));
+        return new Stream(eager(intersection(this, other)), {
+            immutable:
+                this.sourceProperties.immutable &&
+                other instanceof Stream &&
+                other.sourceProperties.immutable,
+        });
     }
 
     public defined(): Stream<T extends undefined ? never : T> {
-        return this.filter(value => value !== undefined) as any;
+        return new Stream(
+            eager(filter(this, value => value !== undefined)),
+            this.sourceProperties
+        ) as any;
     }
 
     public nonNull(): Stream<T extends null ? never : T> {
-        return this.filter(value => value !== null) as any;
+        return new Stream(
+            eager(filter(this, value => value !== null)),
+            this.sourceProperties
+        ) as any;
     }
 
     public undefined(): Stream<T extends undefined ? T : never> {
-        return this.filter(value => value === undefined) as any;
+        return new Stream(
+            eager(filter(this, value => value === undefined)),
+            this.sourceProperties
+        ) as any;
     }
 
     public null(): Stream<T extends null ? T : never> {
-        return this.filter(value => value === null) as any;
+        return new Stream(
+            eager(filter(this, value => value === null)),
+            this.sourceProperties
+        ) as any;
     }
 
     public nullableObjects(): Stream<T extends object | null ? T : never> {
-        return this.filter(value => typeof value === "object") as any;
+        return new Stream(
+            eager(filter(this, value => typeof value === "object")),
+            this.sourceProperties
+        ) as any;
     }
 
     public objects(): Stream<T extends object ? T : never> {
-        return this.filter(
-            value => value !== null && typeof value === "object"
+        return new Stream(
+            eager(
+                filter(
+                    this,
+                    value => value !== null && typeof value === "object"
+                )
+            ),
+            this.sourceProperties
         ) as any;
     }
 
     public numbers(): Stream<T extends number ? T : never> {
-        return this.filter(value => typeof value === "bigint") as any;
+        return new Stream(
+            eager(filter(this, value => typeof value === "number")),
+            this.sourceProperties
+        ) as any;
     }
 
     public bigints(): Stream<T extends bigint ? T : never> {
-        return this.filter(value => typeof value === "bigint") as any;
+        return new Stream(
+            eager(filter(this, value => typeof value === "number")),
+            this.sourceProperties
+        ) as any;
     }
 
     public strings(): Stream<T extends string ? T : never> {
-        return this.filter(value => typeof value === "string") as any;
+        return new Stream(
+            eager(filter(this, value => typeof value === "string")),
+            this.sourceProperties
+        ) as any;
     }
 
     public booleans(): Stream<T extends boolean ? T : never> {
-        return this.filter(value => typeof value === "boolean") as any;
+        return new Stream(
+            eager(filter(this, value => typeof value === "boolean")),
+            this.sourceProperties
+        ) as any;
     }
 
     public functions(): Stream<T extends Function ? T : never> {
-        return this.filter(
-            value => typeof value === "function" || value instanceof Function
+        return new Stream(
+            eager(
+                filter(
+                    this,
+                    value =>
+                        typeof value === "function" || value instanceof Function
+                )
+            ),
+            this.sourceProperties
         ) as any;
     }
 
@@ -629,7 +716,12 @@ export default class Stream<T> implements Iterable<T> {
         valueSelector?: (value: T, index: number) => V
     ): ReadonlyMap<K, V> {
         const source = this.getSource();
-        if (this.sourceProperties.oneOff && source instanceof Map)
+        if (
+            this.sourceProperties.oneOff &&
+            keySelector === undefined &&
+            valueSelector === undefined &&
+            source instanceof Map
+        )
             return source;
         return toMap(source, keySelector as any, valueSelector as any);
     }
@@ -724,13 +816,17 @@ export default class Stream<T> implements Iterable<T> {
         return asSolid(this.getSource());
     }
 
-    /** Normally Streams are recalculated every iteration in order to stay consistent with the Stream's source. This method records the result of the stream and returns a new Stream of that recording. The returned Stream no longer follows changes to the original source and iterating the new Stream doesn't iterate the original Stream. The copy of the Stream is made at call time. For lazy execution use {@link lazySolidify}. */
+    /**
+     * Normally Streams are recalculated every iteration in order to stay consistent with the Stream's source. This method records the result of the stream and returns a new Stream of that recording. The returned Stream no longer follows changes to the original source and iterating the new Stream doesn't iterate the original Stream.
+     *
+     * The copy of the Stream is made at call time. For lazy execution use {@link lazySolidify}.
+     */
     public solidify(): Stream<T> {
         const solid = this.asSolid();
         return new Stream(() => solid, { immutable: true });
     }
 
-    /** Lazy version of {@link solidify}. */
+    /** Lazy version of {@link solidify}. The Stream is copied on the first iteration of the result and cached for later iterations. */
     public lazySolidify(): Stream<T> {
         return new Stream(
             lazy(() => this.asSolid()),
@@ -880,15 +976,16 @@ export default class Stream<T> implements Iterable<T> {
      * @returns A random value from the Stream.
      * @throws If the Stream is empty.
      */
-    public random(): T {
-        return random.choice(this.asSolid());
-    }
+    public random(): T;
 
     /**
-     * @returns A Stream of random values from the original Stream. If the original Stream is empty, an empty Stream is returned regardless of the count requested.
+     * @returns A Stream of non-unique random values from the original Stream. If the original Stream is empty, an empty Stream is returned regardless of the count requested.
      * @param count How many random values the returned Stream will have.
      */
-    public takeRandom(count: number | bigint): Stream<T> {
+    public random(count: number | bigint): Stream<T>;
+
+    public random(count?: number | bigint): Stream<T> | T {
+        if (count === undefined) return random.choice(this.asSolid());
         const usableCount = BigInt(count);
         if (usableCount < 0)
             throw new Error(
@@ -897,9 +994,9 @@ export default class Stream<T> implements Iterable<T> {
 
         const self = this;
         return Stream.iter(function* () {
-            const solid = self.asSolid();
-            if (getNonIteratedCount(solid) === 0) return;
-            for (let i = 0n; i < usableCount; i++) yield random.choice(solid);
+            const array = self.asArray();
+            if (array.length === 0) return;
+            for (let i = 0n; i < usableCount; i++) yield random.choice(array);
         });
     }
 
