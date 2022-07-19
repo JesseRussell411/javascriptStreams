@@ -350,6 +350,11 @@ export default class Stream<T> implements Iterable<T> {
         return this.skipWhile((_, index) => index < usableCount);
     }
 
+    /**
+     * Takes a specified number of values from the Stream, spread out from the start to the end.
+     * @param count How many values to take from the Stream.
+     * @returns A Stream of values spread out accross the original Stream.
+     */
     public takeSparse(count: number | bigint) {
         const usableCount = BigInt(count);
         if (count < 0)
@@ -366,6 +371,11 @@ export default class Stream<T> implements Iterable<T> {
         }, this.sourceProperties);
     }
 
+    /**
+     * Skips a specified number of values in the Stream, spread out from the start to the end.
+     * @param count How many values to skip.
+     * @returns A Stream of values spread out accross the original Stream.
+     */
     public skipSparse(count: number | bigint) {
         const usableCount = BigInt(count);
         if (count < 0)
@@ -471,7 +481,7 @@ export default class Stream<T> implements Iterable<T> {
         const self = this;
         return new Stream(eager(distinct(this, identifier)), {
             immutable:
-                this.sourceProperties.immutable && identifier === this.undefined
+                this.sourceProperties.immutable && identifier === undefined
                     ? true
                     : undefined,
         });
@@ -552,6 +562,11 @@ export default class Stream<T> implements Iterable<T> {
         });
     }
 
+    /**
+     * Appends the values from the given Iterable to the end of the Stream if they aren't already in the Stream.
+     * @param needed
+     * @returns
+     */
     public with(needed: Iterable<T>): Stream<T> {
         return new Stream(eager(including(this, needed)), {
             immutable:
@@ -561,6 +576,11 @@ export default class Stream<T> implements Iterable<T> {
         });
     }
 
+    /**
+     * Removes all the values found in the given Iterable from the Stream.
+     * @param remove What not to include in the returned stream.
+     * @returns A Stream of all the values in the original Stream that are not found in the given Iterable.
+     */
     public without(remove: Iterable<T>): Stream<T> {
         return new Stream(eager(excluding(this, remove)), {
             immutable:
@@ -570,6 +590,7 @@ export default class Stream<T> implements Iterable<T> {
         });
     }
 
+    /** Performs a zipper merge with the given Iterable. */
     public merge<O>(other: Iterable<O>): Stream<T | O> {
         return new Stream(eager(merge(this, other)), {
             immutable:
@@ -579,6 +600,7 @@ export default class Stream<T> implements Iterable<T> {
         });
     }
 
+    /** Keeps only the values that are in both the Stream and the given Iterable */
     public intersect(other: Iterable<T>): Stream<T> {
         return new Stream(eager(intersection(this, other)), {
             immutable:
@@ -588,6 +610,7 @@ export default class Stream<T> implements Iterable<T> {
         });
     }
 
+    /** Keeps only the values in the Stream that aren't undefined. */
     public defined(): Stream<T extends undefined ? never : T> {
         return new Stream(
             eager(filter(this, value => value !== undefined)),
@@ -595,6 +618,7 @@ export default class Stream<T> implements Iterable<T> {
         ) as any;
     }
 
+    /** Keeps only the values in the Stream that aren't null. */
     public nonNull(): Stream<T extends null ? never : T> {
         return new Stream(
             eager(filter(this, value => value !== null)),
@@ -602,6 +626,7 @@ export default class Stream<T> implements Iterable<T> {
         ) as any;
     }
 
+    /** Keeps only the values in the Stream that are undefined. */
     public undefined(): Stream<T extends undefined ? T : never> {
         return new Stream(
             eager(filter(this, value => value === undefined)),
@@ -609,6 +634,7 @@ export default class Stream<T> implements Iterable<T> {
         ) as any;
     }
 
+    /** Keeps only the values in the Stream that are null. */
     public null(): Stream<T extends null ? T : never> {
         return new Stream(
             eager(filter(this, value => value === null)),
@@ -616,6 +642,7 @@ export default class Stream<T> implements Iterable<T> {
         ) as any;
     }
 
+    /** Keeps only the values in the Stream that are objects or null. */
     public nullableObjects(): Stream<T extends object | null ? T : never> {
         return new Stream(
             eager(filter(this, value => typeof value === "object")),
@@ -623,6 +650,7 @@ export default class Stream<T> implements Iterable<T> {
         ) as any;
     }
 
+    /** Keeps only the values in the Stream that are objects and not null. */
     public objects(): Stream<T extends object ? T : never> {
         return new Stream(
             eager(
@@ -635,6 +663,7 @@ export default class Stream<T> implements Iterable<T> {
         ) as any;
     }
 
+    /** Keeps only the values in the Stream that are numbers. */
     public numbers(): Stream<T extends number ? T : never> {
         return new Stream(
             eager(filter(this, value => typeof value === "number")),
@@ -642,6 +671,7 @@ export default class Stream<T> implements Iterable<T> {
         ) as any;
     }
 
+    /** Keeps only the values in the Stream that are bigints. */
     public bigints(): Stream<T extends bigint ? T : never> {
         return new Stream(
             eager(filter(this, value => typeof value === "number")),
@@ -649,6 +679,23 @@ export default class Stream<T> implements Iterable<T> {
         ) as any;
     }
 
+    /** Keeps only the values in the Stream that are numbers or bigints. */
+    public numbersAndBigints(): Stream<
+        T extends number ? T : T extends bigint ? T : never
+    > {
+        return new Stream(
+            eager(
+                filter(
+                    this,
+                    value =>
+                        typeof value === "number" || typeof value === "bigint"
+                )
+            ),
+            this.sourceProperties
+        ) as any;
+    }
+
+    /** Keeps only the values in the Stream that are strings. */
     public strings(): Stream<T extends string ? T : never> {
         return new Stream(
             eager(filter(this, value => typeof value === "string")),
@@ -656,6 +703,7 @@ export default class Stream<T> implements Iterable<T> {
         ) as any;
     }
 
+    /** Keeps only the values in the Stream that are booleans. */
     public booleans(): Stream<T extends boolean ? T : never> {
         return new Stream(
             eager(filter(this, value => typeof value === "boolean")),
@@ -663,6 +711,7 @@ export default class Stream<T> implements Iterable<T> {
         ) as any;
     }
 
+    /** Keeps only the values in the Stream that are functions. */
     public functions(): Stream<T extends Function ? T : never> {
         return new Stream(
             eager(
@@ -676,6 +725,11 @@ export default class Stream<T> implements Iterable<T> {
         ) as any;
     }
 
+    /**
+     * Copies the Stream into an Array. The Array is safe to modify.
+     *
+     * If the Array does not need to be modifiable, consider using {@link asArray} instead.
+     */
     public toArray(): T[] {
         const source = this.getSource();
         if (this.sourceProperties.oneOff && Array.isArray(source))
@@ -684,6 +738,11 @@ export default class Stream<T> implements Iterable<T> {
         return [...source];
     }
 
+    /**
+     * Copies the Stream into a Set. The Set is safe to modify.
+     *
+     * If the Set does not need to be modifiable, consider using {@link asSet} instead.
+     */
     public toSet(): Set<T> {
         const source = this.getSource();
         if (this.sourceProperties.oneOff && source instanceof Set)
@@ -692,6 +751,11 @@ export default class Stream<T> implements Iterable<T> {
         return new Set(source);
     }
 
+    /**
+     * Copies the Stream into a Map. The Map is safe to modify.
+     *
+     * If the Map does not need to be modifiable, consider using {@link asMap} instead.
+     */
     public toMap(): T extends EntryLike<infer K, infer V>
         ? Map<K, V>
         : T extends EntryLikeKey<infer K>
@@ -740,6 +804,9 @@ export default class Stream<T> implements Iterable<T> {
     }
 
     private cache_asArray?: readonly T[];
+    /**
+     * Provides a readonly Array of the contents of the Stream. If the Array needs to be modifiable consider using {@link toArray} instead.
+     */
     public asArray() {
         if (this.sourceProperties.immutable) {
             if (this.cache_asArray === undefined)
@@ -749,6 +816,9 @@ export default class Stream<T> implements Iterable<T> {
     }
 
     private cache_asSet?: ReadonlySet<T>;
+    /**
+     * Provides a readonly Set of the contents of the Stream. If the Set needs to be modifiable consider using {@link toSet} instead.
+     */
     public asSet() {
         if (this.sourceProperties.immutable) {
             if (this.cache_asSet === undefined)
@@ -774,6 +844,9 @@ export default class Stream<T> implements Iterable<T> {
         return asMap(this.getSource());
     }
 
+    /**
+     * Provides a readonly Map of the contents of the Stream. If the Map needs to be modifiable consider using {@link toMap} instead.
+     */
     public asMap(): T extends EntryLike<infer K, infer V>
         ? ReadonlyMap<K, V>
         : T extends EntryLikeKey<infer K>
@@ -1064,11 +1137,23 @@ export default class Stream<T> implements Iterable<T> {
         return getNonIteratedCountOrUndefined(this.getSource());
     }
 
+    /**
+     * Calls the given function with the Stream and returns the result.
+     */
     public then<R>(next: (stream: this) => R) {
         return next(this);
     }
 
+    /**
+     * Iterates over the Stream, recording how long it takes.
+     * @retuns How long in milliseconds it took for the Stream to be Iterated.
+     */
     public benchmark(): number;
+
+    /**
+     * Iterates over the Stream, recording how long it takes.
+     * @retuns A [solidified]{@link solidify} version of the Stream. Note that subsequent calls to {@link benchmark} will include the time taken to iterate the soldified version isntead of the original Stream effectively timing the method calls between calls to {@link benchmark}.
+     */
     public benchmark(takeTime: (timeInMilliseconds: number) => void): Stream<T>;
 
     public benchmark(

@@ -2,10 +2,19 @@ import Stream from "./Stream";
 import { and } from "./logic";
 import { StreamableArray } from "./Streamable";
 
+/**
+ * @returns Returns a function which returns the given value.
+ */
 export function eager<T>(result: T): () => T {
     return () => result;
 }
 
+/**
+ * Creates a cached version of the given function.
+ * @returns The cached version of the function. The original function is called once on the first call of the returned function and the result is cached. Subsequent calls return the cached result of the first call without calling the original function.
+ *
+ * Note that this function consideres both returns and throws as output. If the original function throws an error, the error will be cached, thrown, and thrown again on all subsequent calls without calling the original function.
+ */
 export function lazy<T>(getter: () => T): () => T {
     let resultGetter = () => {
         let output: T;
@@ -25,16 +34,20 @@ export function lazy<T>(getter: () => T): () => T {
     return () => resultGetter();
 }
 
+/** @returns An Iterable over the Generator from the given function */
 export function iter<T>(generatorGetter: () => Generator<T>) {
     return {
         [Symbol.iterator]: generatorGetter,
     };
 }
 
+const emptyIterable = iter(function* () {
+    return;
+});
+
+/** @returns An emtpy Iterable. */
 export function empty<T>(): Iterable<T> {
-    return iter(function* () {
-        return;
-    });
+    return emptyIterable;
 }
 
 export function map<T, R>(
@@ -198,6 +211,7 @@ export function bigintComparator(a: bigint, b: bigint): number {
     return Number(a - b);
 }
 
+/** Adds the key and value to the map and the returns the value */
 export function setAndGet<K, MV, V extends MV>(
     map: Map<K, MV>,
     key: K,
@@ -207,6 +221,9 @@ export function setAndGet<K, MV, V extends MV>(
     return value;
 }
 
+/**
+ * @returns The last value in the given Iterable.
+ */
 export function last<T>(collection: Iterable<T>) {
     if (isArray(collection)) {
         if (collection.length > 0) return collection[collection.length - 1];
@@ -218,6 +235,7 @@ export function last<T>(collection: Iterable<T>) {
     return last;
 }
 
+/** @returns The value at the given index from the start of the given Iterable or the value at the given negative index from the end of the given Iterable (0 returns the first value, -1 returns the last value, -2 returns the second to last value, etc.).*/
 export function at<T>(
     collection: Iterable<T>,
     index: number | bigint
@@ -228,7 +246,10 @@ export function at<T>(
         return collection[usableIndex];
     } else {
         const usableIndex = BigInt(index);
-        if (usableIndex < 0) return at(reverse(collection), -usableIndex);
+        if (usableIndex < 0n) {
+            const array = [...collection];
+            return array[array.length - Number(usableIndex)];
+        }
 
         let i = 0n;
         for (const value of collection) if (i++ === usableIndex) return value;
