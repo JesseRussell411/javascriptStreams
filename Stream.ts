@@ -419,11 +419,11 @@ export default class Stream<T> implements Iterable<T> {
     }
 
     /**
-     * Removes a number of values from the Stream.
+     * Removes a number of values from the Stream. Similar to {@link Array.splice}.
      * @param start Where to start the removal.
      * @param deleteCount How many values to remvoe.
      */
-    public splice(start: number | bigint, deleteCount: number | bigint) {
+    public remove(start: number | bigint, deleteCount: number | bigint = 1) {
         const useableStart = BigInt(start);
         const useableDeleteCount = BigInt(start);
         if (useableStart < 0n) {
@@ -710,7 +710,7 @@ export default class Stream<T> implements Iterable<T> {
 
     public readonly asSolid: () => ReadonlySolid<T>;
 
-    /** Normally Streams are recalculated every time they are iterated in order to stay consistent with the Stream's source. This method records the result of the stream and returns a new Stream of that recording. The returned Stream no longer follows changes to the original source and iterating the new Stream doesn't iterate the original Stream. The copy of the Stream is made at call time. For lazy execution use {@link lazySolidify}. */
+    /** Normally Streams are recalculated every iteration in order to stay consistent with the Stream's source. This method records the result of the stream and returns a new Stream of that recording. The returned Stream no longer follows changes to the original source and iterating the new Stream doesn't iterate the original Stream. The copy of the Stream is made at call time. For lazy execution use {@link lazySolidify}. */
     public solidify(): Stream<T> {
         const solid = this.asSolid();
         return new Stream(() => solid, { immutable: true });
@@ -950,8 +950,8 @@ export default class Stream<T> implements Iterable<T> {
         return getNonIteratedCountOrUndefined(this.getSource());
     }
 
-    public then<R>(action: (stream: this) => R) {
-        return action(this);
+    public then<R>(next: (stream: this) => R) {
+        return next(this);
     }
 }
 
@@ -988,7 +988,7 @@ export class OrderedStream<T> extends Stream<T> {
     }
 
     public thenBy(comparator: Comparator<T>): OrderedStream<T>;
-    public thenBy(parameter: (value: T) => any): OrderedStream<T>;
+    public thenBy(keySelector: (value: T) => any): OrderedStream<T>;
     public thenBy(order: Order<T>): OrderedStream<T> {
         return new OrderedStream(
             this.originalGetSource,
@@ -998,7 +998,7 @@ export class OrderedStream<T> extends Stream<T> {
     }
 
     public thenByDescending(comparator: Comparator<T>): OrderedStream<T>;
-    public thenByDescending(parameter: (value: T) => any): OrderedStream<T>;
+    public thenByDescending(keySelector: (value: T) => any): OrderedStream<T>;
     public thenByDescending(order: Order<T>): OrderedStream<T> {
         return this.thenBy(reverseOrder(order));
     }
