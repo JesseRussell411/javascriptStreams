@@ -241,21 +241,23 @@ export function at<T>(
     index: number | bigint
 ): T | undefined {
     if (isArray(collection)) {
-        const usableIndex = Math.trunc(Number(index));
-        if (usableIndex < 0) return collection[collection.length + usableIndex];
-        return collection[usableIndex];
+        const numberIndex = Math.trunc(Number(index));
+        if (numberIndex < 0) return collection[collection.length + numberIndex];
+        return collection[numberIndex];
     } else {
-        const usableIndex = BigInt(index);
-        if (usableIndex < 0n) {
+        const numberIndex = Number(index);
+        if (numberIndex < 0) {
             const array = [...collection];
-            return array[array.length - Number(usableIndex)];
+            return array[array.length - numberIndex];
         }
+        const bigintIndex = BigInt(index);
 
         let i = 0n;
-        for (const value of collection) if (i++ === usableIndex) return value;
+        for (const value of collection) if (i++ >= bigintIndex) return value;
     }
 }
 
+/** @returns An Iterable over the given Iterable in reverse order. */
 export function reverse<T>(collection: Iterable<T>): Iterable<T> {
     return iter(function* () {
         const array = asArray(collection);
@@ -284,33 +286,6 @@ export function asNumber(
 
 export type ObjectKey = number | string | symbol;
 
-function rateType(value: any) {
-    if (value === null) return 8;
-    if (Array.isArray(value)) return 2;
-
-    switch (typeof value) {
-        case "function":
-            return 1;
-
-        //case of array - 2
-
-        case "object":
-            return 3;
-        case "symbol":
-            return 4;
-        case "boolean":
-            return 5;
-        case "number":
-            return 6;
-        case "bigint":
-            return 6;
-        case "string":
-            return 7;
-
-        //case of null - 8
-    }
-    return -1;
-}
 export interface SmartCompareOptions {
     compareObjects?: (
         a: Record<ObjectKey, any>,
@@ -319,36 +294,68 @@ export interface SmartCompareOptions {
     compareArrays?: (a: readonly any[], b: readonly any[]) => number;
 }
 
+/** Compares two values in a way that makes more sense the default of {@link Array.sort}, which just compares by their ascii string values. Unlike {@link Array.sort}'s default comparison, This comparison function compares numbers by returning their difference. */
 export function smartCompare(
     a: any,
     b: any,
     options: SmartCompareOptions = {}
 ): number {
-    if (a === undefined) return 0;
-    if (b === undefined) return 0;
+    function rateType(value: any) {
+        if (value === null) return 8;
+        if (Array.isArray(value)) return 2;
+
+        switch (typeof value) {
+            case "function":
+                return 1;
+
+            // array - 2
+
+            case "object":
+                return 3;
+            case "symbol":
+                return 4;
+            case "boolean":
+                return 5;
+
+            case "number":
+                return 6;
+            case "bigint":
+                return 6;
+
+            case "string":
+                return 7;
+
+            // null - 8
+
+            // Array.sort doesn't actually sort undefined values. It just puts all the undefineds at the end of the array even if the comparator says otherwise.
+            // So I guess I'll just have to agree with Array.sort here
+            case "undefined":
+                return 9;
+        }
+        return -1;
+    }
+    // firts sort by type
     const typeRatingA = rateType(a);
     const typeRatingB = rateType(b);
     if (typeRatingA !== typeRatingB) return typeRatingA - typeRatingB;
 
-    if (typeof a === "string") return a.localeCompare(`${b}`);
-    if (typeof b === "string") return `${a}`.localeCompare(b);
+    // then value
 
-    if (typeof a === "bigint" && typeof b === "bigint") return Number(a - b);
+    // numeric
+    if (typeof a === "number") {
+        if (typeof b === "number") return a - b;
+        if (typeof b === "bigint") return a - Number(b);
+    } else if (typeof a === "bigint") {
+        if (typeof b === "number") return Number(a) - b;
+        if (typeof b === "bigint") return Number(a - b);
+    }
 
-    if (
-        (typeof a === "number" ||
-            typeof a === "bigint" ||
-            typeof a === "boolean" ||
-            a == null) &&
-        (typeof b === "number" ||
-            typeof b === "bigint" ||
-            typeof b === "boolean" ||
-            b == null)
-    )
-        return asNumber(a) - asNumber(b);
-
-    if (options.compareArrays !== undefined && isArray(a) && isArray(b))
-        return options.compareArrays(a, b);
+    // arrays
+    if (Array.isArray(a) && Array.isArray(b)) {
+        if (options.compareArrays !== undefined)
+            return options.compareArrays(a, b);
+        else return a.length - b.length;
+    }
 
     if (
         options.compareObjects !== undefined &&

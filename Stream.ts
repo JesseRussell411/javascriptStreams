@@ -1169,6 +1169,14 @@ export default class Stream<T> implements Iterable<T> {
         takeTime(stopwatch.elapsedTimeInMilliseconds);
         return solidified;
     }
+
+    public toString() {
+        return this.join(",");
+    }
+
+    public toJSON() {
+        return `[${this.join(",")}]`;
+    }
 }
 
 /**
