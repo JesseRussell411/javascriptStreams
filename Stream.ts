@@ -169,7 +169,7 @@ export default class Stream<T> implements Iterable<T> {
     }
 
     /**
-     * @returns A stream of the values that pass the filter. Like {@link Array.filter}.
+     * @returns A stream of the values that pass the filter. Like {@link Array.filter}. Chained calls are short circuted.
      * @param test Whether the given value passes the filter. Return true to include the value in the returned Stream and false to not include it.
      */
     public filter(test: (value: T, index: number) => boolean): Stream<T> {
