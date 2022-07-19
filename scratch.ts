@@ -3,6 +3,7 @@ import { StreamableArray } from "./Streamable";
 import { getTestData } from "./getTestData";
 import { DeLiteral, isArray, random, range, ValueOf } from "./utils";
 import { inspect } from "util";
+import Stopwatch from "./javascriptStopwatch/stopwatch";
 
 async function main() {
     const customers = Stream.of(await getTestData());
@@ -60,34 +61,43 @@ async function main() {
         1000
     ).lazySolidify();
 
+    const sw = new Stopwatch();
     console.log("start...");
-    console.log(
-        inspect(
-            customers
-                .groupJoin(
-                    purchases,
-                    c => c.id,
-                    p => p.customerID,
-                    (customer, purchases) => ({
-                        ...customer,
-                        purchases: purchases.toArray(),
-                    })
-                )
-                .filter(c => c.purchases.length > 1)
-                .filter(c => c.gender === "Male")
-                .orderBy(c => c.purchases.length)
-                .thenBy(c => c.first_name)
-                .thenBy(c => c.last_name)
-                .thenBy(c => c.id)
-                .map(c => ({ ...c, net_worth: random.range(-10, 10) }))
-                .map(c => ({ ...c, self_worth: random.range(-10, 10) }))
-                .takeSparse(10)
-                .asArray(),
-            false,
-            null,
-            true
+    sw.restart();
+    const result = customers
+        .groupJoin(
+            purchases,
+            c => c.id,
+            p => p.customerID,
+            (customer, purchases) => ({
+                ...customer,
+                purchases: purchases.toArray(),
+            })
         )
-    );
+        .benchmark(time => console.log("groupJoin: " + time))
+
+        .filter(c => c.purchases.length > 1)
+        .filter(c => c.gender === "Male")
+        .benchmark(time => console.log("filter: " + time))
+
+        .orderBy(c => c.purchases.length)
+        .thenBy(c => c.first_name)
+        .thenBy(c => c.last_name)
+        .thenBy(c => c.id)
+        .benchmark(time => console.log("orderBy: " + time))
+
+        .map(c => ({ ...c, net_worth: random.range(-10, 10) }))
+        .map(c => ({ ...c, self_worth: random.range(-10, 10) }))
+        .benchmark(time => console.log("map: " + time))
+
+        .takeSparse(10)
+        .benchmark(time => console.log("takeSparse: " + time))
+
+        .asArray();
+
+    const timeToRun = sw.elapsedTimeInMilliseconds;
+    // console.log(inspect(result, false, null, true));
+    console.log(`Ran query in ${timeToRun} milliseconds.`);
 
     // console.log(inspect(customers.groupJoin(customers, c => c.first_name, oc => oc.first_name, ())))
 

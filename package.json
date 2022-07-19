@@ -25,5 +25,8 @@
     "prettier": {
         "tabWidth": 4,
         "arrowParens": "avoid"
+    },
+    "dependencies": {
+        "browser-or-node": "^2.0.0"
     }
 }

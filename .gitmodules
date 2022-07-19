@@ -1,0 +1,3 @@
+[submodule "javascriptStopwatch"]
+	path = javascriptStopwatch
+	url = git@github.com:JesseRussell411/javascriptStopwatch.git

@@ -1,4 +1,6 @@
 import { ReadStream } from "fs";
+import Stopwatch from "./javascriptStopwatch/stopwatch";
+import getStopwatchClass from "./javascriptStopwatch/stopwatch";
 import { and, or } from "./logic";
 import { Streamable, StreamableArray, StreamableTuple } from "./Streamable";
 import {
@@ -50,9 +52,9 @@ import {
     isSolid,
     asSolid,
     bigintComparator,
-    takeAlternating,
+    alternating as alternating,
     getNonIteratedCount,
-    skipAlternating,
+    alternatingSkip as removeAlternating,
     eager,
     distinct,
     map,
@@ -67,6 +69,7 @@ export type OrderedStreamSourceProperties<T> = StreamSourceProperties<T>;
 export type MappedStreamSourceProperties<T> = StreamSourceProperties<T>;
 export type FilteredStreamSourceProperties<T> = StreamSourceProperties<T>;
 
+/** Stream literal. */
 export function stream<T>(...values: T[]): Stream<T> {
     return Stream.of(values);
 }
@@ -148,18 +151,16 @@ export default class Stream<T> implements Iterable<T> {
     }
 
     /** @returns A Stream of the given mapping from the original Stream. Like {@link Array.map}. */
-    public map<R>(
-        mapping: (value: T, index: number) => R
-    ): MappedStream<any, R> {
-        return new MappedStream(this.getSource, mapping);
+    public map<R>(mapping: (value: T, index: number) => R): Stream<R> {
+        return Stream.of(map(this, mapping));
     }
 
     /**
-     * @returns A stream of the values that pass the filter. Like {@link Array.filter}. Chained calls are short circuted.
+     * @returns A stream of the values that pass the filter. Like {@link Array.filter}.
      * @param test Whether the given value passes the filter. Return true to include the value in the returned Stream and false to not include it.
      */
     public filter(test: (value: T, index: number) => boolean): Stream<T> {
-        return new FilteredStream(this.getSource, test);
+        return Stream.of(filter(this, test));
     }
 
     public repeat(times: number | bigint): Stream<T> {
@@ -282,6 +283,20 @@ export default class Stream<T> implements Iterable<T> {
         );
     }
 
+    public alternating(interval: number | bigint = 2n): Stream<T> {
+        return new Stream(
+            eager(alternating(this, interval)),
+            this.sourceProperties
+        );
+    }
+
+    public removeAlternating(interval: number | bigint = 2n): Stream<T> {
+        return new Stream(
+            eager(removeAlternating(this, interval)),
+            this.sourceProperties
+        );
+    }
+
     /**
      * Iterates over the Stream, stopping at the first value to fail the test.
      */
@@ -335,32 +350,19 @@ export default class Stream<T> implements Iterable<T> {
         return this.skipWhile((_, index) => index < usableCount);
     }
 
-    public takeAlternating(interval: number | bigint = 2n): Stream<T> {
-        return new Stream(
-            eager(takeAlternating(this, interval)),
-            this.sourceProperties
-        );
-    }
-
-    public skipAlternating(interval: number | bigint = 2n): Stream<T> {
-        return new Stream(
-            eager(skipAlternating(this, interval)),
-            this.sourceProperties
-        );
-    }
-
     public takeSparse(count: number | bigint) {
         const usableCount = BigInt(count);
         if (count < 0)
             throw new Error(
                 `count must be 0 or greater but ${count} was given`
             );
+
         if (count === 0) return Stream.empty<T>();
-        const self = this;
+
         return new Stream(() => {
             const solid = this.asSolid();
-            const count = getNonIteratedCount(solid);
-            return takeAlternating(solid, BigInt(count) / usableCount);
+            const sourceLength = getNonIteratedCount(solid);
+            return alternating(solid, BigInt(sourceLength) / usableCount);
         }, this.sourceProperties);
     }
 
@@ -370,12 +372,13 @@ export default class Stream<T> implements Iterable<T> {
             throw new Error(
                 `count must be 0 or greater but ${count} was given`
             );
+
         if (count === 0) return this;
-        const self = this;
+
         return new Stream(() => {
             const solid = this.asSolid();
-            const count = getNonIteratedCount(solid);
-            return skipAlternating(solid, BigInt(count) / usableCount);
+            const sourceLength = getNonIteratedCount(solid);
+            return removeAlternating(solid, BigInt(sourceLength) / usableCount);
         }, this.sourceProperties);
     }
 
@@ -1064,6 +1067,23 @@ export default class Stream<T> implements Iterable<T> {
     public then<R>(next: (stream: this) => R) {
         return next(this);
     }
+
+    public benchmark(): number;
+    public benchmark(takeTime: (timeInMilliseconds: number) => void): Stream<T>;
+
+    public benchmark(
+        takeTime?: (timeInMilliseconds: number) => void
+    ): Stream<T> | number {
+        const stopwatch = new Stopwatch();
+
+        stopwatch.start();
+        const solidified = this.solidify();
+        stopwatch.stop();
+
+        if (takeTime === undefined) return stopwatch.elapsedTimeInMilliseconds;
+        takeTime(stopwatch.elapsedTimeInMilliseconds);
+        return solidified;
+    }
 }
 
 /**
@@ -1112,48 +1132,5 @@ export class OrderedStream<T> extends Stream<T> {
     public thenByDescending(keySelector: (value: T) => any): OrderedStream<T>;
     public thenByDescending(order: Order<T>): OrderedStream<T> {
         return this.thenBy(reverseOrder(order));
-    }
-}
-
-export class MappedStream<T, R> extends Stream<R> {
-    private readonly mapping: (value: T, index: number) => R;
-    private readonly originalGetSource: () => Iterable<T>;
-    public constructor(
-        getSource: () => Iterable<T>,
-        mapping: (value: T, index: number) => R,
-        sourceProperties: MappedStreamSourceProperties<T> = {}
-    ) {
-        super(() => map(getSource(), mapping), sourceProperties);
-        this.mapping = mapping;
-        this.originalGetSource = getSource;
-    }
-
-    public map<Rnew>(
-        mapping: (value: R, index: number) => Rnew
-    ): MappedStream<T, Rnew> {
-        return new MappedStream(this.originalGetSource, (value, index) =>
-            mapping(this.mapping(value, index), index)
-        );
-    }
-}
-
-export class FilteredStream<T> extends Stream<T> {
-    private readonly test: (value: T, index: number) => boolean;
-    private readonly originalGetSource: () => Iterable<T>;
-    public constructor(
-        getSource: () => Iterable<T>,
-        test: (value: T, index: number) => boolean,
-        sourceProperties: FilteredStreamSourceProperties<T> = {}
-    ) {
-        super(() => filter(getSource(), test), sourceProperties);
-        this.originalGetSource = getSource;
-        this.test = test;
-    }
-
-    public filter(test: (value: T, index: number) => boolean) {
-        return new FilteredStream(
-            this.originalGetSource,
-            (value, index) => this.test(value, index) && test(value, index)
-        );
     }
 }

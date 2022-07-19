@@ -902,7 +902,7 @@ export type Solid<T> =
     | Set<T>
     | (T extends [infer K, infer V] ? Map<K, V> & Iterable<T> : never);
 
-export function takeAlternating<T>(
+export function alternating<T>(
     collection: Iterable<T>,
     interval: number | bigint = 2n
 ): Iterable<T> {
@@ -911,19 +911,28 @@ export function takeAlternating<T>(
         throw new Error(
             `interval must be 0 or greater but ${interval} was given`
         );
+
     if (usableInterval === 0n) return empty<T>();
-    return iter(function* () {
-        let i = 1;
-        for (const value of collection) {
-            if (i++ >= usableInterval) {
-                i = 1;
-                yield value;
+
+    if (isArray(collection)) {
+        return iter(function* () {
+            const resultSize = BigInt(collection.length) / usableInterval;
+            const numberInterval = Number(usableInterval);
+
+            for (let i = 0; i < resultSize; i++)
+                yield collection[i * numberInterval];
+        });
+    } else {
+        return iter(function* () {
+            let i = 0n;
+            for (const value of collection) {
+                if (i++ % usableInterval === 0n) yield value;
             }
-        }
-    });
+        });
+    }
 }
 
-export function skipAlternating<T>(
+export function alternatingSkip<T>(
     collection: Iterable<T>,
     interval: number | bigint = 2n
 ): Iterable<T> {
@@ -932,15 +941,13 @@ export function skipAlternating<T>(
         throw new Error(
             `interval must be 0 or greater but ${interval} was given`
         );
+
     if (usableInterval === 0n) return collection;
+
     return iter(function* () {
-        let i = 1;
+        let i = 0n;
         for (const value of collection) {
-            if (i++ >= usableInterval) {
-                i = 1;
-            } else {
-                yield value;
-            }
+            if (i++ % usableInterval !== 0n) yield value;
         }
     });
 }
