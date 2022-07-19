@@ -1,5 +1,5 @@
 import Stream, { stream } from "./Stream";
-import { StreamableArray } from "./streamable";
+import { StreamableArray } from "./Streamable";
 import { getTestData } from "./getTestData";
 import { DeLiteral, isArray, random, range, ValueOf } from "./utils";
 import { inspect } from "util";
@@ -79,8 +79,8 @@ async function main() {
                 .thenBy(c => c.first_name)
                 .thenBy(c => c.last_name)
                 .thenBy(c => c.id)
-                .map(c => ({...c, net_worth: random.range(-10, 10)}))
-                .map(c => ({...c, self_worth: random.range(-10, 10)}))
+                .map(c => ({ ...c, net_worth: random.range(-10, 10) }))
+                .map(c => ({ ...c, self_worth: random.range(-10, 10) }))
                 .takeSparse(10)
                 .asArray(),
             false,

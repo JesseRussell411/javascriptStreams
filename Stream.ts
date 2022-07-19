@@ -1,5 +1,5 @@
 import { and, or } from "./logic";
-import { Streamable, StreamableArray, StreamableTuple } from "./streamable";
+import { Streamable, StreamableArray, StreamableTuple } from "./Streamable";
 import {
     lazy,
     iter,
