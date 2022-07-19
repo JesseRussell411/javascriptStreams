@@ -49,13 +49,16 @@ import {
     isSolid,
     asSolid,
     bigintComparator,
-    alternate,
+    takeAlternating,
     getNonIteratedCount,
+    skipAlternating,
+    eager,
+    distinct,
 } from "./utils";
 
 export interface StreamSourceProperties<T> {
-    oneOff?: true;
-    immutable?: true;
+    oneOff?: boolean;
+    immutable?: boolean;
 }
 export type OrderedStreamSourceProperties<T> = StreamSourceProperties<T> & {};
 
@@ -76,14 +79,17 @@ export default class Stream<T> implements Iterable<T> {
         const asArrayBase = () => asArray(getSource());
         const asSetBase = () => asSet(getSource());
         const asMapParameterlessBase = () => asMap(getSource());
+        const asSolidBase = () => asSolid(getSource());
         if (this.sourceProperties.immutable) {
             this.asArray = lazy(asArrayBase);
             this.asSet = lazy(asSetBase);
             this.asMapParameterless = lazy(asMapParameterlessBase);
+            this.asSolid = lazy(asSolidBase);
         } else {
             this.asArray = asArrayBase;
             this.asSet = asSetBase;
             this.asMapParameterless = asMapParameterlessBase;
+            this.asSolid = asSolidBase;
         }
     }
 
@@ -240,7 +246,7 @@ export default class Stream<T> implements Iterable<T> {
     }
 
     /**
-     * An out-of-place sort of the values in the Stream bases on the given comparator. Like {@link Array.sort}.
+     * An out-of-place sort of the values in the Stream based on the given comparator. Like {@link Array.sort}.
      * @returns A Stream of the original Streams values sorted by the comparator.
      * @params comparator How to sort the values. If ommited, the values are sorted in ascending, ASCII order.
      */
@@ -334,12 +340,14 @@ export default class Stream<T> implements Iterable<T> {
     public take(count: number | bigint): Stream<T> {
         const usableCount = Math.trunc(Number(count));
         if (usableCount < 0) return this.reverse().take(-count).reverse();
+        if (usableCount === 0) return Stream.empty<T>();
         return this.takeWhile((_, index) => index < usableCount);
     }
 
     public skip(count: number | bigint): Stream<T> {
         const usableCount = Math.trunc(Number(count));
         if (usableCount < 0) return this.reverse().skip(-count).reverse();
+        if (usableCount === 0) return this;
         return this.skipWhile((_, index) => index < usableCount);
     }
 
@@ -348,6 +356,14 @@ export default class Stream<T> implements Iterable<T> {
         return Stream.iter(function* () {
             for (const value of self) yield value;
             for (const value of other) yield value;
+        });
+    }
+
+    public unShift<O>(other: Iterable<O>): Stream<T | O> {
+        const self = this;
+        return Stream.iter(function* () {
+            for (const value of other) yield value;
+            for (const value of self) yield value;
         });
     }
 
@@ -394,36 +410,14 @@ export default class Stream<T> implements Iterable<T> {
         );
     }
 
-    public unShift<O>(other: Iterable<O>): Stream<T | O> {
-        const self = this;
-        return Stream.iter(function* () {
-            for (const value of other) yield value;
-            for (const value of self) yield value;
-        });
-    }
-
     public distinct(identifier?: (value: T) => any): Stream<T> {
         const self = this;
-        const usableIdentifier = identifier ?? (value => value);
-        return new Stream(
-            () =>
-                iter(function* () {
-                    const returned = new Set<any>();
-                    for (const value of self) {
-                        const id = usableIdentifier(value);
-                        if (returned.has(id)) continue;
-                        yield value;
-                        returned.add(id);
-                    }
-                }),
-            {
-                immutable:
-                    this.sourceProperties.immutable &&
-                    identifier === this.undefined
-                        ? true
-                        : undefined,
-            }
-        );
+        return new Stream(eager(distinct(this, identifier)), {
+            immutable:
+                this.sourceProperties.immutable && identifier === this.undefined
+                    ? true
+                    : undefined,
+        });
     }
 
     /**
@@ -477,9 +471,16 @@ export default class Stream<T> implements Iterable<T> {
         );
     }
 
-    public alternate(interval: number | bigint = 2n): Stream<T> {
+    public takeAlternating(interval: number | bigint = 2n): Stream<T> {
         return new Stream(
-            () => alternate(this, interval),
+            eager(takeAlternating(this, interval)),
+            this.sourceProperties
+        );
+    }
+
+    public skipAlternating(interval: number | bigint = 2n): Stream<T> {
+        return new Stream(
+            eager(skipAlternating(this, interval)),
             this.sourceProperties
         );
     }
@@ -495,7 +496,22 @@ export default class Stream<T> implements Iterable<T> {
         return new Stream(() => {
             const solid = this.asSolid();
             const count = getNonIteratedCount(solid);
-            return alternate(solid, BigInt(count) / usableCount);
+            return takeAlternating(solid, BigInt(count) / usableCount);
+        }, this.sourceProperties);
+    }
+
+    public skipSparse(count: number | bigint) {
+        const usableCount = BigInt(count);
+        if (count < 0)
+            throw new Error(
+                `count must be 0 or greater but ${count} was given`
+            );
+        if (count === 0) return this;
+        const self = this;
+        return new Stream(() => {
+            const solid = this.asSolid();
+            const count = getNonIteratedCount(solid);
+            return skipAlternating(solid, BigInt(count) / usableCount);
         }, this.sourceProperties);
     }
 
@@ -511,23 +527,23 @@ export default class Stream<T> implements Iterable<T> {
     }
 
     public append(value: T) {
-        return new Stream(() => append(this, value), {
+        return new Stream(eager(append(this, value)), {
             immutable: this.sourceProperties.immutable,
         });
     }
 
     public prepend(value: T) {
-        return new Stream(() => prepend(this, value), {
+        return new Stream(eager(append(this, value)), {
             immutable: this.sourceProperties.immutable,
         });
     }
 
     public with(needed: Iterable<T>): Stream<T> {
-        return Stream.from(() => including(this, needed));
+        return Stream.from(eager(including(this, needed)));
     }
 
     public without(remove: Iterable<T>): Stream<T> {
-        return Stream.from(() => excluding(this, remove));
+        return Stream.from(eager(excluding(this, remove)));
     }
 
     public merge<O>(other: Iterable<O>): Stream<T | O> {
@@ -602,19 +618,56 @@ export default class Stream<T> implements Iterable<T> {
         return new Set(source);
     }
 
-    /**
-     * Normally Streams are recalculated every time they are iterated in order to be consistent with the Stream's source. The method records the result of the stream and returns a new Stream of that recording. The returned stream no longer followws changes to the source of the original Stream and the original Stream won't be recalculated when the new Stream is iterated.
-     */
-    public solidify(): Stream<T> {
-        const solid = this.asSolid();
-        return new Stream(() => solid, { immutable: true });
+    public toMap(): T extends EntryLike<infer K, infer V>
+        ? Map<K, V>
+        : T extends EntryLikeKey<infer K>
+        ? Map<K, unknown>
+        : T extends EntryLikeValue<infer V>
+        ? Map<unknown, V>
+        : Map<unknown, unknown>;
+
+    public toMap<K>(
+        keySelector: (value: T, index: number) => K
+    ): T extends EntryLikeValue<infer V> ? ReadonlyMap<K, V> : never;
+
+    public toMap<V>(
+        keySelector: undefined,
+        valueSelector: (value: T, index: number) => V
+    ): T extends EntryLikeKey<infer K> ? ReadonlyMap<K, V> : never;
+
+    public toMap<K, V>(
+        keySelector: (value: T, index: number) => K,
+        valueSelector: (value: T, index: number) => V
+    ): ReadonlyMap<K, V>;
+
+    public toMap<K, V>(
+        keySelector?: (value: T, index: number) => K,
+        valueSelector?: (value: T, index: number) => V
+    ): ReadonlyMap<K, V> {
+        const source = this.getSource();
+        if (this.sourceProperties.oneOff && source instanceof Map)
+            return source;
+        return toMap(source, keySelector as any, valueSelector as any);
     }
 
-    public asArray: () => readonly T[];
+    public toSolid(): Solid<T> {
+        const source = this.getSource();
+        if (this.sourceProperties.oneOff) {
+            if (Array.isArray(source)) return source;
+            if (source instanceof Set) return source;
+            if (source instanceof Map) return source as any;
+        }
+        return [...source];
+    }
 
-    public asSet: () => ReadonlySet<T>;
+    public readonly asArray: () => readonly T[];
 
-    private asMapParameterless: () => T extends EntryLike<infer K, infer V>
+    public readonly asSet: () => ReadonlySet<T>;
+
+    private readonly asMapParameterless: () => T extends EntryLike<
+        infer K,
+        infer V
+    >
         ? ReadonlyMap<K, V>
         : T extends EntryLikeKey<infer K>
         ? ReadonlyMap<K, unknown>
@@ -657,59 +710,20 @@ export default class Stream<T> implements Iterable<T> {
         );
     }
 
-    public asSolid(): ReadonlySolid<T> {
-        const source = this.getSource();
-        if (isArray(source)) return source;
-        if (isSet(source)) return source;
-        if (source instanceof Map) return source as any;
-        return [...source];
+    public readonly asSolid: () => ReadonlySolid<T>;
+
+    /** Normally Streams are recalculated every time they are iterated in order to stay consistent with the Stream's source. This method records the result of the stream and returns a new Stream of that recording. The returned Stream no longer follows changes to the original source and iterating the new Stream doesn't iterate the original Stream. The copy of the Stream is made at call time. For lazy execution use {@link lazySolidify}. */
+    public solidify(): Stream<T> {
+        const solid = this.asSolid();
+        return new Stream(() => solid, { immutable: true });
     }
 
-    public toMap(): T extends EntryLike<infer K, infer V>
-        ? Map<K, V>
-        : T extends EntryLikeKey<infer K>
-        ? Map<K, unknown>
-        : T extends EntryLikeValue<infer V>
-        ? Map<unknown, V>
-        : Map<unknown, unknown>;
-
-    public toMap<K>(
-        keySelector: (value: T, index: number) => K
-    ): T extends EntryLikeValue<infer V> ? ReadonlyMap<K, V> : never;
-
-    public toMap<V>(
-        keySelector: undefined,
-        valueSelector: (value: T, index: number) => V
-    ): T extends EntryLikeKey<infer K> ? ReadonlyMap<K, V> : never;
-
-    public toMap<K, V>(
-        keySelector: (value: T, index: number) => K,
-        valueSelector: (value: T, index: number) => V
-    ): ReadonlyMap<K, V>;
-
-    public toMap<K, V>(
-        keySelector?: (value: T, index: number) => K,
-        valueSelector?: (value: T, index: number) => V
-    ): ReadonlyMap<K, V> {
-        const source = this.getSource();
-        if (this.sourceProperties.oneOff && source instanceof Map)
-            return source;
-        return toMap(source, keySelector as any, valueSelector as any);
-    }
-
-    private cache_toSolid: Solid<T> | undefined = undefined;
-    public toSolid(): Solid<T> {
-        const source = this.getSource();
-        if (this.sourceProperties.oneOff) {
-            if (Array.isArray(source)) return source;
-            if (source instanceof Set) return source;
-            if (source instanceof Map) return source as any;
-        }
-        if (this.sourceProperties.immutable) {
-            if (this.cache_toSolid === undefined)
-                this.cache_toSolid = [...source];
-            return this.cache_toSolid;
-        } else return [...source];
+    /** Lazy version of {@link solidify}. */
+    public lazySolidify(): Stream<T> {
+        return new Stream(
+            lazy(() => this.asSolid()),
+            { immutable: true }
+        );
     }
 
     /**
@@ -854,32 +868,27 @@ export default class Stream<T> implements Iterable<T> {
      * @returns A random value from the Stream.
      * @throws If the Stream is empty.
      */
-    public random(): T;
+    public random(): T {
+        return random.choice(this.asSolid());
+    }
 
     /**
-     * @returns A Stream of random values from the original Stream. If the original Stream is empty, an empty Stream is returned.
-     * @param count The length of the Stream
+     * @returns A Stream of random values from the original Stream. If the original Stream is empty, an empty Stream is returned regardless of the count requested.
+     * @param count How many random values the returned Stream will have.
      */
-    public random(count: number | bigint): Stream<T>;
-
-    public random(_count?: number | bigint): T | undefined | Stream<T> {
-        const count = BigInt(_count ?? 1);
-        if (count < 0)
+    public takeRandom(count: number | bigint): Stream<T> {
+        const usableCount = BigInt(count);
+        if (usableCount < 0)
             throw new Error(
-                `count must be 0 or greater but ${_count} was given`
+                `count must be 0 or greater but ${count} was given`
             );
 
-        if (_count === undefined) {
-            return random.choice(this.asSolid());
-        } else {
-            const self = this;
-            return Stream.iter(function* () {
-                const array = self.asArray();
-                if (array.length === 0) return;
-                for (let i = 0n; i < count; i++)
-                    yield array[Math.trunc(Math.random() * array.length)];
-            });
-        }
+        const self = this;
+        return Stream.iter(function* () {
+            const solid = self.asSolid();
+            if (getNonIteratedCount(solid) === 0) return;
+            for (let i = 0n; i < usableCount; i++) yield random.choice(solid);
+        });
     }
 
     /** @returns The value at the given index or the value at the given negative index from the end of the Stream (-1 returns the last value, -2 returns the second to last value, etc.).*/
@@ -980,54 +989,12 @@ export class OrderedStream<T> extends Stream<T> {
         this.sourceProperties = sourceProperties;
     }
 
-    /**
-     * @returns An empty OrderedStream of the given type and order.
-     * @param orderedBy Describes the order of the returned Stream.
-     */
-    public static empty<T>(
-        orderedBy: Iterable<Order<T>> = []
-    ): OrderedStream<T> {
-        return new OrderedStream<T>(() => [], [...orderedBy], {
-            oneOff: true,
-            immutable: true,
-        });
-    }
-
-    /**
-     * @returns An OrderedSteam of the given source and order.
-     * @param orderedBy Described the order of the returned Stream.
-     */
-    public static of<T>(
-        source: Iterable<T>,
-        orderedBy: Iterable<Order<T>> = []
-    ): OrderedStream<T> {
-        return new OrderedStream(() => source ?? [], [...orderedBy]);
-    }
-
-    /**
-     * @returns A stream of the source from the given source-getter function. Note that the function will be called every time the Stream is iterated to generate a new source.
-     * @param orderedBy Defines the order of the returned Stream.
-     */
-    public static from<T>(
-        sourceGetter: () => Iterable<T>,
-        orderedBy: Iterable<Order<T>> = []
-    ): OrderedStream<T> {
-        return new OrderedStream(sourceGetter, [...orderedBy]);
-    }
-
-    public static iter<T>(
-        generatorGetter: () => Generator<T>,
-        orderedBy: Iterable<Order<T>> = []
-    ): OrderedStream<T> {
-        return new OrderedStream(() => generatorGetter(), [...orderedBy]);
-    }
-
     public thenBy(comparator: Comparator<T>): OrderedStream<T>;
     public thenBy(parameter: (value: T) => any): OrderedStream<T>;
     public thenBy(order: Order<T>): OrderedStream<T> {
         return new OrderedStream(
             this.originalGetSource,
-            [...this.orderedBy, order],
+            append(this.orderedBy, order),
             this.sourceProperties
         );
     }

@@ -2,23 +2,27 @@ import Stream from "./Stream";
 import { and } from "./logic";
 import { StreamableArray } from "./streamable";
 
+export function eager<T>(result: T): () => T {
+    return () => result;
+}
+
 export function lazy<T>(getter: () => T): () => T {
-    let lazyGetter = () => {
+    let resultGetter = () => {
         let output: T;
         try {
             output = getter();
         } catch (e) {
-            lazyGetter = () => {
+            resultGetter = () => {
                 throw e;
             };
             throw e;
         }
 
-        lazyGetter = () => output;
+        resultGetter = () => output;
         return output;
     };
 
-    return () => lazyGetter();
+    return () => resultGetter();
 }
 
 export function iter<T>(generatorGetter: () => Generator<T>) {
@@ -496,14 +500,14 @@ export function toMap<T, K, V>(
     return map;
 }
 
-export function append<T>(collection: Iterable<T>, value: T) {
+export function append<T>(collection: Iterable<T>, value: T): Iterable<T> {
     return iter(function* () {
         for (const value of collection) yield value;
         yield value;
     });
 }
 
-export function prepend<T>(collection: Iterable<T>, value: T) {
+export function prepend<T>(collection: Iterable<T>, value: T): Iterable<T> {
     return iter(function* () {
         yield value;
         for (const value of collection) yield value;
@@ -712,12 +716,16 @@ export function getNonIteratedCountOrUndefined(
     return undefined;
 }
 
-export function distinct<T>(collection: Iterable<T>): Iterable<T> {
+export function distinct<T>(
+    collection: Iterable<T>,
+    identifier: (value: T) => any = value => value
+): Iterable<T> {
     return iter(function* () {
-        const returned = new Set<T>();
+        const returned = new Set<any>();
         for (const value of collection) {
-            if (!returned.has(value)) {
-                returned.add(value);
+            const id = identifier(value);
+            if (!returned.has(id)) {
+                returned.add(id);
                 yield value;
             }
         }
@@ -874,7 +882,7 @@ export type Solid<T> =
     | Set<T>
     | (T extends [infer K, infer V] ? Map<K, V> & Iterable<T> : never);
 
-export function alternate<T>(
+export function takeAlternating<T>(
     collection: Iterable<T>,
     interval: number | bigint = 2n
 ): Iterable<T> {
@@ -889,6 +897,28 @@ export function alternate<T>(
         for (const value of collection) {
             if (i++ >= usableInterval) {
                 i = 1;
+                yield value;
+            }
+        }
+    });
+}
+
+export function skipAlternating<T>(
+    collection: Iterable<T>,
+    interval: number | bigint = 2n
+): Iterable<T> {
+    const usableInterval = BigInt(interval);
+    if (usableInterval < 0)
+        throw new Error(
+            `interval must be 0 or greater but ${interval} was given`
+        );
+    if (usableInterval === 0n) return collection;
+    return iter(function* () {
+        let i = 1;
+        for (const value of collection) {
+            if (i++ >= usableInterval) {
+                i = 1;
+            } else {
                 yield value;
             }
         }

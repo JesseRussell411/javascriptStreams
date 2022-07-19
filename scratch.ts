@@ -6,7 +6,6 @@ import { inspect } from "util";
 
 async function main() {
     const customers = Stream.of(await getTestData());
-    const customersShuffled = customers.shuffle().solidify();
     const products = (() => {
         let id = 1;
         const productNames = [
@@ -50,7 +49,7 @@ async function main() {
                 id: id++,
             }),
             productNames.length
-        ).solidify();
+        ).lazySolidify();
     })();
 
     const purchases = Stream.generate(
@@ -59,7 +58,7 @@ async function main() {
             product: products.random(),
         }),
         1000
-    );
+    ).lazySolidify();
 
     console.log("start...");
     console.log(
