@@ -37,6 +37,26 @@ export function empty<T>(): Iterable<T> {
     });
 }
 
+export function map<T, R>(
+    collection: Iterable<T>,
+    mapping: (value: T, index: number) => R
+): Iterable<R> {
+    return iter(function* () {
+        let index = 0;
+        for (const value of collection) yield mapping(value, index++);
+    });
+}
+
+export function filter<T>(
+    collection: Iterable<T>,
+    test: (value: T, index: number) => boolean
+): Iterable<T> {
+    return iter(function* () {
+        let index = 0;
+        for (const value of collection) if (test(value, index++)) yield value;
+    });
+}
+
 export function concat<A, B>(a: Iterable<A>, b: Iterable<B>): Iterable<A | B> {
     return iter(function* () {
         for (const value of a) yield value;

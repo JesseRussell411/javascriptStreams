@@ -74,10 +74,13 @@ async function main() {
                     })
                 )
                 .filter(c => c.purchases.length > 1)
+                .filter(c => c.gender === "Male")
                 .orderBy(c => c.purchases.length)
                 .thenBy(c => c.first_name)
                 .thenBy(c => c.last_name)
                 .thenBy(c => c.id)
+                .map(c => ({...c, net_worth: random.range(-10, 10)}))
+                .map(c => ({...c, self_worth: random.range(-10, 10)}))
                 .takeSparse(10)
                 .asArray(),
             false,

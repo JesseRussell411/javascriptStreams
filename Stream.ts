@@ -54,13 +54,17 @@ import {
     skipAlternating,
     eager,
     distinct,
+    map,
+    filter,
 } from "./utils";
 
 export interface StreamSourceProperties<T> {
     oneOff?: boolean;
     immutable?: boolean;
 }
-export type OrderedStreamSourceProperties<T> = StreamSourceProperties<T> & {};
+export type OrderedStreamSourceProperties<T> = StreamSourceProperties<T>;
+export type MappedStreamSourceProperties<T> = StreamSourceProperties<T>;
+export type FilteredStreamSourceProperties<T> = StreamSourceProperties<T>;
 
 export function stream<T>(...values: T[]): Stream<T> {
     return Stream.of(values);
@@ -158,24 +162,18 @@ export default class Stream<T> implements Iterable<T> {
     }
 
     /** @returns A Stream of the given mapping from the original Stream. Like {@link Array.map}. */
-    public map<R>(mapping: (value: T, index: number) => R): Stream<R> {
-        const self = this;
-        return Stream.iter(function* () {
-            let index = 0;
-            for (const value of self) yield mapping(value, index++);
-        });
+    public map<R>(
+        mapping: (value: T, index: number) => R
+    ): MappedStream<any, R> {
+        return new MappedStream(this.getSource, mapping);
     }
 
     /**
      * @returns A stream of the values that pass the filter. Like {@link Array.filter}.
-     * @param filter Whether the given value passes the filter. Return true to include the value in the returned Stream and false to not include it.
+     * @param test Whether the given value passes the filter. Return true to include the value in the returned Stream and false to not include it.
      */
-    public filter(filter: (value: T, index: number) => boolean): Stream<T> {
-        const self = this;
-        return Stream.iter(function* () {
-            let index = 0;
-            for (const value of self) if (filter(value, index)) yield value;
-        });
+    public filter(test: (value: T, index: number) => boolean): Stream<T> {
+        return new FilteredStream(this.getSource, test);
     }
 
     public repeat(times: number | bigint): Stream<T> {
@@ -1003,5 +1001,48 @@ export class OrderedStream<T> extends Stream<T> {
     public thenByDescending(parameter: (value: T) => any): OrderedStream<T>;
     public thenByDescending(order: Order<T>): OrderedStream<T> {
         return this.thenBy(reverseOrder(order));
+    }
+}
+
+export class MappedStream<T, R> extends Stream<R> {
+    private readonly mapping: (value: T, index: number) => R;
+    private readonly originalGetSource: () => Iterable<T>;
+    public constructor(
+        getSource: () => Iterable<T>,
+        mapping: (value: T, index: number) => R,
+        sourceProperties: MappedStreamSourceProperties<T> = {}
+    ) {
+        super(() => map(getSource(), mapping), sourceProperties);
+        this.mapping = mapping;
+        this.originalGetSource = getSource;
+    }
+
+    public map<Rnew>(
+        mapping: (value: R, index: number) => Rnew
+    ): MappedStream<T, Rnew> {
+        return new MappedStream(this.originalGetSource, (value, index) =>
+            mapping(this.mapping(value, index), index)
+        );
+    }
+}
+
+export class FilteredStream<T> extends Stream<T> {
+    private readonly test: (value: T, index: number) => boolean;
+    private readonly originalGetSource: () => Iterable<T>;
+    public constructor(
+        getSource: () => Iterable<T>,
+        test: (value: T, index: number) => boolean,
+        sourceProperties: FilteredStreamSourceProperties<T> = {}
+    ) {
+        super(() => filter(getSource(), test), sourceProperties);
+        this.originalGetSource = getSource;
+        this.test = test;
+    }
+
+    public filter(test: (value: T, index: number) => boolean) {
+        return new FilteredStream(
+            this.originalGetSource,
+            (value, index) => this.test(value, index) && test(value, index)
+        );
     }
 }
