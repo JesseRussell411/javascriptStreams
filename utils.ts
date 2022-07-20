@@ -637,7 +637,6 @@ export function range(_startOrEnd: any, _end?: any, _step?: any): any {
 
     const test = step > ZERO ? (i: any) => i < end : (i: any) => i > end;
 
-    console.log({ start, end, step });
     return iter(function* () {
         for (let i = start; test(i); i += step) yield i;
     });
