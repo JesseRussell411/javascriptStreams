@@ -1150,7 +1150,7 @@ export default class Stream<T> implements Iterable<T> {
 
     /**
      * Iterates over the Stream, recording how long it takes.
-     * @retuns A [solidified]{@link solidify} version of the Stream. Note that subsequent calls to {@link benchmark} will include the time taken to iterate the soldified version isntead of the original Stream effectively timing the method calls between calls to {@link benchmark}.
+     * @retuns A Stream over the original Stream's result. Note that subsequent calls to {@link benchmark} will include the time taken to iterate a copy of the original Stream's result isntead of the original Stream effectively timing the method calls between calls to {@link benchmark}.
      */
     public benchmark(takeTime: (timeInMilliseconds: number) => void): Stream<T>;
 
@@ -1160,18 +1160,14 @@ export default class Stream<T> implements Iterable<T> {
         const stopwatch = new Stopwatch();
 
         stopwatch.start();
-        const solidified = this.solidify();
+        const result = [...this];
         stopwatch.stop();
 
         if (takeTime === undefined) return stopwatch.elapsedTimeInMilliseconds;
 
         takeTime(stopwatch.elapsedTimeInMilliseconds);
 
-        // return an array-based stream for the consistency of future benchmarks;
-        return new Stream(
-            eager(solidified.asArray()),
-            solidified.sourceProperties
-        );
+        return Stream.of(result);
     }
 
     public toString() {
