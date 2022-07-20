@@ -629,33 +629,6 @@ export default class Stream<T> implements Iterable<T> {
         ) as any;
     }
 
-    public functions(): Stream<T extends Function ? T : never> {
-        return new Stream(
-            eager(
-                filter(
-                    this,
-                    value =>
-                        typeof value === "function" || value instanceof Function
-                )
-            ),
-            this.sourceProperties
-        ) as any;
-    }
-
-    public nonFunctions(): Stream<T extends Function ? never : T> {
-        return new Stream(
-            eager(
-                filter(
-                    this,
-                    value =>
-                        typeof value !== "function" &&
-                        !(value instanceof Function)
-                )
-            ),
-            this.sourceProperties
-        ) as any;
-    }
-
     /**
      * Copies the Stream into an Array. The Array is safe to modify.
      *
