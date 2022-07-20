@@ -164,6 +164,9 @@ export default class Stream<T> implements Iterable<T> {
         return Stream.of(filter(this, test));
     }
 
+    /**
+     * Filters the stream to values of the specified type. Use {@link TypeFilteredStream.and} to add more constraints.
+     */
     public filterToType<Option extends TypeFilterOption>(
         option: Option
     ): TypeFilteredStream<T, Option> {
@@ -174,6 +177,9 @@ export default class Stream<T> implements Iterable<T> {
         );
     }
 
+    /**
+     * Filters the stream to values that aren't the specified type. Use {@link TypeFilteredOutStream.and} to add more constraints.
+     */
     filterOutType<Option extends TypeFilterOption>(
         option: Option
     ): TypeFilteredOutStream<T, TypeFilterOutTest<Option, T>> {
@@ -613,7 +619,7 @@ export default class Stream<T> implements Iterable<T> {
         });
     }
 
-    /** Keeps only the values in the Stream that aren't undefined. */
+    /** Keeps only the values in the Stream that aren't undefined. For more advanced type filtering try {@link filterToType} and {@link filterOutType}. */
     public defined(): Stream<T extends undefined ? never : T> {
         return new Stream(
             eager(filter(this, value => value !== undefined)),
@@ -621,7 +627,7 @@ export default class Stream<T> implements Iterable<T> {
         ) as any;
     }
 
-    /** Keeps only the values in the Stream that aren't null. */
+    /** Keeps only the values in the Stream that aren't null. For more advanced type filtering try {@link filterToType} and {@link filterOutType}. */
     public nonNull(): Stream<T extends null ? never : T> {
         return new Stream(
             eager(filter(this, value => value !== null)),
@@ -1341,6 +1347,9 @@ export class TypeFilteredStream<
         this.originalGetSource = getSource;
     }
 
+    /**
+     * Adds another type constaint.
+     */
     public and<Option extends TypeFilterOption>(
         option: Option
     ): TypeFilteredStream<Original, Options | Option> {
@@ -1373,6 +1382,9 @@ export class TypeFilteredOutStream<Original, Result> extends Stream<Result> {
         this.originalGetSource = getSource;
     }
 
+    /**
+     * Adds another type constaint.
+     */
     public and<Option extends TypeFilterOption>(
         option: Option
     ): TypeFilteredOutStream<Original, TypeFilterOutTest<Option, Result>> {

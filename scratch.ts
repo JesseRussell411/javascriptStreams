@@ -102,7 +102,7 @@ async function main() {
         1,
         2,
         0n,
-        
+
         "sas;dlkfj",
         true,
         false,
@@ -112,7 +112,7 @@ async function main() {
         undefined,
         { b: 7 },
     ] as const)
-        .filterToType("string").and("false").and("0n").and("undefined")
+        .defined()
         .skip(0);
     console.log(nandb.asArray());
 
