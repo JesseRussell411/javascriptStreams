@@ -1,4 +1,4 @@
-import Stream, { stream } from "./Stream";
+import Stream from "./Stream";
 import { StreamableArray } from "./Streamable";
 import { getTestData } from "./getTestData";
 import { DeLiteral, isArray, random, range, ValueOf } from "./utils";

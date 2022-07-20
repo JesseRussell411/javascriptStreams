@@ -84,8 +84,8 @@ export default class Stream<T> implements Iterable<T> {
     public static empty<T>(): Stream<T> {
         return new Stream<T>(() => [], { oneOff: true, immutable: true });
     }
-    public static literal<T>(...values: T[]){
-        return new Stream(() => values, {immutable: true})
+    public static literal<T>(...values: T[]) {
+        return new Stream(() => values, { immutable: true });
     }
 
     public static of<T>(source: Iterable<T>) {
@@ -1166,7 +1166,12 @@ export default class Stream<T> implements Iterable<T> {
         if (takeTime === undefined) return stopwatch.elapsedTimeInMilliseconds;
 
         takeTime(stopwatch.elapsedTimeInMilliseconds);
-        return solidified;
+
+        // return an array-based stream for the consistency of future benchmarks;
+        return new Stream(
+            eager(solidified.asArray()),
+            solidified.sourceProperties
+        );
     }
 
     public toString() {
