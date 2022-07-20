@@ -106,15 +106,26 @@ async function main() {
         "sas;dlkfj",
         true,
         false,
+        false,
         () => 21,
         [10, 20, 30],
         null,
         undefined,
         { b: 7 },
     ] as const)
-        .defined()
+        .filterOutType("undefined")
+        .and("function")
+        .and("object")
+        .and("array")
+        .and("0")
+        .and("0n")
         .skip(0);
     console.log(nandb.asArray());
+
+    const nandbcopy = nandb.solidify();
+    console.log(
+        nandb.sequenceEqual([1, 2, "sas;dlkfj", true, true, false, null])
+    );
 
     // console.log(inspect(customers.groupJoin(customers, c => c.first_name, oc => oc.first_name, ())))
 

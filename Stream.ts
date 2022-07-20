@@ -76,6 +76,13 @@ export default class Stream<T> implements Iterable<T> {
     protected readonly getSource: () => Iterable<T>;
     protected readonly sourceProperties: StreamSourceProperties<T>;
 
+    /** For the case of a Stream of a Stream of a Stream of a Stream... etc. @returns The base most source (which isn't a stream). */
+    protected getBaseSource() {
+        let current: Iterable<T> = this.getSource();
+        while (current instanceof Stream) current = current.getSource();
+        return current;
+    }
+
     public constructor(
         getSource: () => Iterable<T>,
         sourceProperties: StreamSourceProperties<T> = {}
@@ -1054,6 +1061,41 @@ export default class Stream<T> implements Iterable<T> {
         return next(this);
     }
 
+    public sequenceEqual(
+        other: Iterable<T>,
+        checkEquality: (a: T, b: T) => boolean = (a, b) => Object.is(a, b)
+    ) {
+        const source = this.getBaseSource();
+        const otherSource =
+            other instanceof Stream ? other.getBaseSource() : other;
+
+        {
+            const count = getNonIteratedCountOrUndefined(source);
+            const otherCount = getNonIteratedCountOrUndefined(otherSource);
+            if (
+                count !== undefined &&
+                otherCount !== undefined &&
+                count !== otherCount
+            )
+                return false;
+        }
+
+        const iter = source[Symbol.iterator]();
+        const otherIter = otherSource[Symbol.iterator]();
+        let next;
+        let otherNext;
+        while (
+            and(
+                !(next = iter.next()).done,
+                !(otherNext = otherIter.next()).done
+            )
+        ) {
+            if (!checkEquality(next.value, otherNext.value)) return false;
+        }
+
+        return next.done && otherNext.done;
+    }
+
     /**
      * Iterates over the Stream, recording how long it takes.
      * @retuns How long in milliseconds it took for the Stream to be Iterated.
@@ -1284,7 +1326,7 @@ export type TypeFilterOutTest<Option extends TypeFilterOption, T> =
     : Option extends "0n"
     ? T extends 0n
         ? never
-        : 0
+        : T
     : T;
 
 function getTypeFilterTest<Original>(
