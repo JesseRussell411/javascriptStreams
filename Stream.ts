@@ -69,11 +69,6 @@ export type OrderedStreamSourceProperties<T> = StreamSourceProperties<T>;
 export type MappedStreamSourceProperties<T> = StreamSourceProperties<T>;
 export type FilteredStreamSourceProperties<T> = StreamSourceProperties<T>;
 
-/** Stream literal. */
-export function stream<T>(...values: T[]): Stream<T> {
-    return Stream.of(values);
-}
-
 export default class Stream<T> implements Iterable<T> {
     protected readonly getSource: () => Iterable<T>;
     protected readonly sourceProperties: StreamSourceProperties<T>;
@@ -88,6 +83,9 @@ export default class Stream<T> implements Iterable<T> {
 
     public static empty<T>(): Stream<T> {
         return new Stream<T>(() => [], { oneOff: true, immutable: true });
+    }
+    public static literal<T>(...values: T[]){
+        return new Stream(() => values, {immutable: true})
     }
 
     public static of<T>(source: Iterable<T>) {
@@ -1166,6 +1164,7 @@ export default class Stream<T> implements Iterable<T> {
         stopwatch.stop();
 
         if (takeTime === undefined) return stopwatch.elapsedTimeInMilliseconds;
+
         takeTime(stopwatch.elapsedTimeInMilliseconds);
         return solidified;
     }
