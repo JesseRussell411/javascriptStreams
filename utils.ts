@@ -60,6 +60,7 @@ export function map<T, R>(
     });
 }
 
+export function filter<T>(collection: Iterable<T>, test: (value: T, index: number) => boolean): Iterable<T>;
 export function filter<T>(
     collection: Iterable<T>,
     test: (value: T, index: number) => boolean

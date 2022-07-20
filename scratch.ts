@@ -98,7 +98,26 @@ async function main() {
     const timeToRun = sw.elapsedTimeInMilliseconds;
     console.log(inspect(result, false, null, true));
     console.log(`Ran query in ${timeToRun} milliseconds.`);
-    console.log("" +Stream.range(4).takeSparse(3))
+    const nandb = Stream.of([
+        1,
+        2,
+        "sas;dlkfj",
+        true,
+        () => 21,
+        [10, 20, 30],
+        null,
+        undefined,
+        { b: 7 },
+    ] as const)
+        .filterToType("null")
+        .and("array")
+        .and("bigint")
+        .and("null")
+        .and("undefined")
+        .and("object")
+        .and("boolean")
+        .skip(0);
+    console.log(JSON.stringify(nandb));
 
     // console.log(inspect(customers.groupJoin(customers, c => c.first_name, oc => oc.first_name, ())))
 

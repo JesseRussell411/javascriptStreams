@@ -61,6 +61,7 @@ import {
     filter,
     skipSparse,
     takeSparse,
+    ValueOf,
 } from "./utils";
 
 export interface StreamSourceProperties<T> {
@@ -161,6 +162,26 @@ export default class Stream<T> implements Iterable<T> {
      */
     public filter(test: (value: T, index: number) => boolean): Stream<T> {
         return Stream.of(filter(this, test));
+    }
+
+    public filterToType<Option extends TypeFilterOption>(
+        option: Option
+    ): TypeFilteredStream<T, TypeFilterResult<Option>> {
+        return new TypeFilteredStream(
+            this.getSource,
+            [getTypeFilterTest<T>(option)],
+            this.sourceProperties
+        );
+    }
+
+    filterOutType<Option extends TypeFilterOption>(
+        option: Option
+    ): TypeFilteredOutStream<T, TypeFilterResult<Option>> {
+        return new TypeFilteredOutStream(
+            this.getSource,
+            [getTypeFilterTest<T>(option)],
+            this.sourceProperties
+        );
     }
 
     public repeat(times: number | bigint): Stream<T> {
@@ -608,92 +629,6 @@ export default class Stream<T> implements Iterable<T> {
         ) as any;
     }
 
-    /** Keeps only the values in the Stream that are undefined. */
-    public undefined(): Stream<T extends undefined ? T : never> {
-        return new Stream(
-            eager(filter(this, value => value === undefined)),
-            this.sourceProperties
-        ) as any;
-    }
-
-    /** Keeps only the values in the Stream that are null. */
-    public null(): Stream<T extends null ? T : never> {
-        return new Stream(
-            eager(filter(this, value => value === null)),
-            this.sourceProperties
-        ) as any;
-    }
-
-    /** Keeps only the values in the Stream that are objects or null. */
-    public nullableObjects(): Stream<T extends object | null ? T : never> {
-        return new Stream(
-            eager(filter(this, value => typeof value === "object")),
-            this.sourceProperties
-        ) as any;
-    }
-
-    /** Keeps only the values in the Stream that are objects and not null. */
-    public objects(): Stream<T extends object ? T : never> {
-        return new Stream(
-            eager(
-                filter(
-                    this,
-                    value => value !== null && typeof value === "object"
-                )
-            ),
-            this.sourceProperties
-        ) as any;
-    }
-
-    /** Keeps only the values in the Stream that are numbers. */
-    public numbers(): Stream<T extends number ? T : never> {
-        return new Stream(
-            eager(filter(this, value => typeof value === "number")),
-            this.sourceProperties
-        ) as any;
-    }
-
-    /** Keeps only the values in the Stream that are bigints. */
-    public bigints(): Stream<T extends bigint ? T : never> {
-        return new Stream(
-            eager(filter(this, value => typeof value === "number")),
-            this.sourceProperties
-        ) as any;
-    }
-
-    /** Keeps only the values in the Stream that are numbers or bigints. */
-    public numbersAndBigints(): Stream<
-        T extends number ? T : T extends bigint ? T : never
-    > {
-        return new Stream(
-            eager(
-                filter(
-                    this,
-                    value =>
-                        typeof value === "number" || typeof value === "bigint"
-                )
-            ),
-            this.sourceProperties
-        ) as any;
-    }
-
-    /** Keeps only the values in the Stream that are strings. */
-    public strings(): Stream<T extends string ? T : never> {
-        return new Stream(
-            eager(filter(this, value => typeof value === "string")),
-            this.sourceProperties
-        ) as any;
-    }
-
-    /** Keeps only the values in the Stream that are booleans. */
-    public booleans(): Stream<T extends boolean ? T : never> {
-        return new Stream(
-            eager(filter(this, value => typeof value === "boolean")),
-            this.sourceProperties
-        ) as any;
-    }
-
-    /** Keeps only the values in the Stream that are functions. */
     public functions(): Stream<T extends Function ? T : never> {
         return new Stream(
             eager(
@@ -701,6 +636,20 @@ export default class Stream<T> implements Iterable<T> {
                     this,
                     value =>
                         typeof value === "function" || value instanceof Function
+                )
+            ),
+            this.sourceProperties
+        ) as any;
+    }
+
+    public nonFunctions(): Stream<T extends Function ? never : T> {
+        return new Stream(
+            eager(
+                filter(
+                    this,
+                    value =>
+                        typeof value !== "function" &&
+                        !(value instanceof Function)
                 )
             ),
             this.sourceProperties
@@ -1162,7 +1111,7 @@ export default class Stream<T> implements Iterable<T> {
     }
 
     public toJSON() {
-        return `[${this.join(",")}]`;
+        return this.asArray();
     }
 }
 
@@ -1212,5 +1161,134 @@ export class OrderedStream<T> extends Stream<T> {
     public thenByDescending(keySelector: (value: T) => any): OrderedStream<T>;
     public thenByDescending(order: Order<T>): OrderedStream<T> {
         return this.thenBy(reverseOrder(order));
+    }
+}
+
+export type TypeFilterOption =
+    | "number"
+    | "bigint"
+    | "string"
+    | "object"
+    | "array"
+    | "undefined"
+    | "null"
+    | "boolean"
+    | "symbol";
+
+export type TypeFilterResult<T extends TypeFilterOption> =
+    | never
+    | T extends "number"
+    ? number
+    : T extends "bigint"
+    ? bigint
+    : T extends "string"
+    ? string
+    : T extends "object"
+    ? object
+    : T extends "array"
+    ? any[] | readonly any[]
+    : T extends "undefined"
+    ? undefined
+    : T extends "null"
+    ? null
+    : T extends "boolean"
+    ? boolean
+    : T extends "symbol"
+    ? symbol
+    : never;
+
+function getTypeFilterTest<Original>(
+    option: TypeFilterOption
+): (value: Original) => boolean {
+    switch (option) {
+        case "number":
+            return value => typeof value === "number";
+        case "array":
+            return value => Array.isArray(value);
+        case "null":
+            return value => value === null;
+        case "object":
+            return value =>
+                value !== null &&
+                typeof value === "object" &&
+                !Array.isArray(value);
+        case "string":
+            return value => typeof value === "string";
+        case "undefined":
+            return value => typeof value === "undefined";
+        case "bigint":
+            return value => typeof value === "bigint";
+        case "boolean":
+            return value => typeof value === "boolean";
+        case "symbol":
+            return value => typeof value === "symbol";
+    }
+}
+
+export class TypeFilteredStream<Original, sofar> extends Stream<
+    Original extends sofar ? Original : never
+> {
+    private readonly tests: Iterable<(value: Original) => boolean>;
+    private readonly originalGetSource: () => Iterable<Original>;
+    public constructor(
+        getSource: () => Iterable<Original>,
+        tests: Iterable<(value: Original) => boolean>,
+        sourceProperties: StreamSourceProperties<Original>
+    ) {
+        super(() => {
+            return filter(getSource(), value => {
+                for (const test of tests) if (test(value)) return true;
+                return false;
+            }) as any;
+        }, sourceProperties);
+
+        this.tests = tests;
+        this.originalGetSource = getSource;
+    }
+
+    public and<Option extends TypeFilterOption>(
+        option: Option
+    ): TypeFilteredStream<Original, sofar | TypeFilterResult<Option>> {
+        let test = getTypeFilterTest<Original>(option);
+
+        return new TypeFilteredStream(
+            this.originalGetSource,
+            append(this.tests, test),
+            this.sourceProperties
+        ) as any;
+    }
+}
+
+export class TypeFilteredOutStream<Original, sofar> extends Stream<
+    Original extends sofar ? never : Original
+> {
+    private readonly tests: Iterable<(value: Original) => boolean>;
+    private readonly originalGetSource: () => Iterable<Original>;
+    public constructor(
+        getSource: () => Iterable<Original>,
+        tests: Iterable<(value: Original) => boolean>,
+        sourceProperties: StreamSourceProperties<Original>
+    ) {
+        super(() => {
+            return filter(getSource(), value => {
+                for (const test of tests) if (test(value)) return false;
+                return true;
+            }) as any;
+        }, sourceProperties);
+
+        this.tests = tests;
+        this.originalGetSource = getSource;
+    }
+
+    public and<Option extends TypeFilterOption>(
+        option: Option
+    ): TypeFilteredOutStream<Original, sofar | TypeFilterResult<Option>> {
+        let test = getTypeFilterTest<Original>(option);
+
+        return new TypeFilteredOutStream(
+            this.originalGetSource,
+            append(this.tests, test),
+            this.sourceProperties
+        ) as any;
     }
 }
