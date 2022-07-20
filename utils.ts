@@ -979,3 +979,55 @@ export function alternatingSkip<T>(
         }
     });
 }
+
+export function skipSparse<T>(collection: Iterable<T>, count: number | bigint) {
+    const usableCount = BigInt(count);
+    if (count < 0)
+        throw new Error(`count must be 0 or greater but ${count} was given`);
+
+    if (count === 0) return collection;
+
+    const array = [...collection];
+    const toSkip = new Set(takeSparse(range(array.length), usableCount));
+
+    return filter(array, (_, index) => !toSkip.has(index));
+}
+
+/**
+ * Takes a specified number of values from the collection, spread out from the start to the end.
+ * @param count How many values to take.
+ * @returns An Iterable over the values spread out accross the collection.
+ */
+export function takeSparse<T>(
+    collection: Iterable<T>,
+    count: number | bigint
+): Iterable<T> {
+    const usableCount = BigInt(count);
+    if (count < 0)
+        throw new Error(`count must be 0 or greater but ${count} was given`);
+
+    if (count === 0) return Stream.empty<T>();
+
+    const solid = asSolid(collection);
+    const sourceLength = getNonIteratedCount(solid);
+    return take(
+        alternating(solid, BigInt(sourceLength) / usableCount),
+        usableCount
+    );
+}
+
+export function take<T>(
+    collection: Iterable<T>,
+    count: number | bigint
+): Iterable<T> {
+    const bigintCount = BigInt(count);
+    if (count < 0n) return take(reverse(collection), -count);
+
+    return iter(function* () {
+        let i = 0n;
+        for (const value of collection) {
+            if (i++ >= bigintCount) break;
+            yield value;
+        }
+    });
+}

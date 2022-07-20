@@ -59,6 +59,8 @@ import {
     distinct,
     map,
     filter,
+    skipSparse,
+    takeSparse,
 } from "./utils";
 
 export interface StreamSourceProperties<T> {
@@ -354,19 +356,10 @@ export default class Stream<T> implements Iterable<T> {
      * @returns A Stream of values spread out accross the original Stream.
      */
     public takeSparse(count: number | bigint) {
-        const usableCount = BigInt(count);
-        if (count < 0)
-            throw new Error(
-                `count must be 0 or greater but ${count} was given`
-            );
-
-        if (count === 0) return Stream.empty<T>();
-
-        return new Stream(() => {
-            const solid = this.asSolid();
-            const sourceLength = getNonIteratedCount(solid);
-            return alternating(solid, BigInt(sourceLength) / usableCount);
-        }, this.sourceProperties);
+        return new Stream(
+            eager(takeSparse(this, count)),
+            this.sourceProperties
+        );
     }
 
     /**
@@ -375,19 +368,10 @@ export default class Stream<T> implements Iterable<T> {
      * @returns A Stream of values spread out accross the original Stream.
      */
     public skipSparse(count: number | bigint) {
-        const usableCount = BigInt(count);
-        if (count < 0)
-            throw new Error(
-                `count must be 0 or greater but ${count} was given`
-            );
-
-        if (count === 0) return this;
-
-        return new Stream(() => {
-            const solid = this.asSolid();
-            const sourceLength = getNonIteratedCount(solid);
-            return removeAlternating(solid, BigInt(sourceLength) / usableCount);
-        }, this.sourceProperties);
+        return new Stream(
+            eager(skipSparse(this, count)),
+            this.sourceProperties
+        );
     }
 
     public takeRandom(count: number | bigint): Stream<T> {

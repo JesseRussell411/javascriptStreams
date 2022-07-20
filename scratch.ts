@@ -98,6 +98,7 @@ async function main() {
     const timeToRun = sw.elapsedTimeInMilliseconds;
     console.log(inspect(result, false, null, true));
     console.log(`Ran query in ${timeToRun} milliseconds.`);
+    console.log("" +Stream.range(4).takeSparse(3))
 
     // console.log(inspect(customers.groupJoin(customers, c => c.first_name, oc => oc.first_name, ())))
 
