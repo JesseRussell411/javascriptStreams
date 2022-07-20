@@ -101,23 +101,20 @@ async function main() {
     const nandb = Stream.of([
         1,
         2,
+        0n,
+        
         "sas;dlkfj",
         true,
+        false,
         () => 21,
         [10, 20, 30],
         null,
         undefined,
         { b: 7 },
     ] as const)
-        .filterToType("null")
-        .and("array")
-        .and("bigint")
-        .and("null")
-        .and("undefined")
-        .and("object")
-        .and("boolean")
+        .filterToType("string").and("false").and("0n")
         .skip(0);
-    console.log(JSON.stringify(nandb));
+    console.log(nandb.asArray());
 
     // console.log(inspect(customers.groupJoin(customers, c => c.first_name, oc => oc.first_name, ())))
 

@@ -166,7 +166,7 @@ export default class Stream<T> implements Iterable<T> {
 
     public filterToType<Option extends TypeFilterOption>(
         option: Option
-    ): TypeFilteredStream<T, TypeFilterResult<Option>> {
+    ): TypeFilteredStream<T, Option> {
         return new TypeFilteredStream(
             this.getSource,
             [getTypeFilterTest<T>(option)],
@@ -176,7 +176,7 @@ export default class Stream<T> implements Iterable<T> {
 
     filterOutType<Option extends TypeFilterOption>(
         option: Option
-    ): TypeFilteredOutStream<T, TypeFilterResult<Option>> {
+    ): TypeFilteredOutStream<T, TypeFilterOutTest<Option, T>> {
         return new TypeFilteredOutStream(
             this.getSource,
             [getTypeFilterTest<T>(option)],
@@ -1168,34 +1168,145 @@ export type TypeFilterOption =
     | "number"
     | "bigint"
     | "string"
-    | "object"
     | "array"
     | "undefined"
     | "null"
     | "boolean"
-    | "symbol";
+    | "true"
+    | "false"
+    | "symbol"
+    | "object"
+    | "function"
+    | "0"
+    | "0n";
 
-export type TypeFilterResult<T extends TypeFilterOption> =
+export type TypeFilterTest<Option extends TypeFilterOption, T> =
     | never
-    | T extends "number"
-    ? number
-    : T extends "bigint"
-    ? bigint
-    : T extends "string"
-    ? string
-    : T extends "object"
-    ? object
-    : T extends "array"
-    ? any[] | readonly any[]
-    : T extends "undefined"
-    ? undefined
-    : T extends "null"
-    ? null
-    : T extends "boolean"
-    ? boolean
-    : T extends "symbol"
-    ? symbol
+    | Option extends "number"
+    ? T extends number
+        ? T
+        : never
+    : Option extends "bigint"
+    ? T extends bigint
+        ? T
+        : never
+    : Option extends "string"
+    ? T extends string
+        ? T
+        : never
+    : Option extends "object"
+    ? T extends object
+        ? T extends Function
+            ? never
+            : T extends readonly any[]
+            ? never
+            : T
+        : never
+    : Option extends "array"
+    ? T extends readonly any[]
+        ? T
+        : never
+    : Option extends "undefined"
+    ? T extends undefined
+        ? T
+        : never
+    : Option extends "null"
+    ? T extends null
+        ? T
+        : never
+    : Option extends "boolean"
+    ? T extends boolean
+        ? T
+        : never
+    : Option extends "true"
+    ? T extends true
+        ? T
+        : never
+    : Option extends "false"
+    ? T extends false
+        ? T
+        : never
+    : Option extends "symbol"
+    ? T extends Symbol
+        ? T
+        : never
+    : Option extends "function"
+    ? T extends Function
+        ? T
+        : never
+    : Option extends "0"
+    ? T extends 0
+        ? T
+        : never
+    : Option extends "0n"
+    ? T extends 0n
+        ? T
+        : never
     : never;
+
+export type TypeFilterOutTest<Option extends TypeFilterOption, T> =
+    | never
+    | Option extends "number"
+    ? T extends number
+        ? never
+        : T
+    : Option extends "bigint"
+    ? T extends bigint
+        ? never
+        : T
+    : Option extends "string"
+    ? T extends string
+        ? never
+        : T
+    : Option extends "object"
+    ? T extends object
+        ? T extends Function
+            ? T
+            : T extends readonly any[]
+            ? T
+            : never
+        : T
+    : Option extends "array"
+    ? T extends readonly any[]
+        ? never
+        : T
+    : Option extends "undefined"
+    ? T extends undefined
+        ? never
+        : T
+    : Option extends "null"
+    ? T extends null
+        ? never
+        : T
+    : Option extends "boolean"
+    ? T extends boolean
+        ? never
+        : T
+    : Option extends "true"
+    ? T extends true
+        ? never
+        : T
+    : Option extends "false"
+    ? T extends false
+        ? never
+        : T
+    : Option extends "symbol"
+    ? T extends Symbol
+        ? never
+        : T
+    : Option extends "function"
+    ? T extends Function
+        ? never
+        : T
+    : Option extends "0"
+    ? T extends 0
+        ? never
+        : T
+    : Option extends "0n"
+    ? T extends 0n
+        ? never
+        : 0
+    : T;
 
 function getTypeFilterTest<Original>(
     option: TypeFilterOption
@@ -1222,12 +1333,23 @@ function getTypeFilterTest<Original>(
             return value => typeof value === "boolean";
         case "symbol":
             return value => typeof value === "symbol";
+        case "function":
+            return value => typeof value === "function";
+        case "true":
+            return value => (value as any) === true;
+        case "false":
+            return value => (value as any) === false;
+        case "0":
+            return value => (value as any) === 0;
+        case "0n":
+            return value => (value as any) === 0n;
     }
 }
 
-export class TypeFilteredStream<Original, sofar> extends Stream<
-    Original extends sofar ? Original : never
-> {
+export class TypeFilteredStream<
+    Original,
+    Options extends TypeFilterOption
+> extends Stream<TypeFilterTest<Options, Original>> {
     private readonly tests: Iterable<(value: Original) => boolean>;
     private readonly originalGetSource: () => Iterable<Original>;
     public constructor(
@@ -1248,7 +1370,7 @@ export class TypeFilteredStream<Original, sofar> extends Stream<
 
     public and<Option extends TypeFilterOption>(
         option: Option
-    ): TypeFilteredStream<Original, sofar | TypeFilterResult<Option>> {
+    ): TypeFilteredStream<Original, Options | Option> {
         let test = getTypeFilterTest<Original>(option);
 
         return new TypeFilteredStream(
@@ -1259,9 +1381,7 @@ export class TypeFilteredStream<Original, sofar> extends Stream<
     }
 }
 
-export class TypeFilteredOutStream<Original, sofar> extends Stream<
-    Original extends sofar ? never : Original
-> {
+export class TypeFilteredOutStream<Original, Result> extends Stream<Result> {
     private readonly tests: Iterable<(value: Original) => boolean>;
     private readonly originalGetSource: () => Iterable<Original>;
     public constructor(
@@ -1282,7 +1402,7 @@ export class TypeFilteredOutStream<Original, sofar> extends Stream<
 
     public and<Option extends TypeFilterOption>(
         option: Option
-    ): TypeFilteredOutStream<Original, sofar | TypeFilterResult<Option>> {
+    ): TypeFilteredOutStream<Original, TypeFilterOutTest<Option, Result>> {
         let test = getTypeFilterTest<Original>(option);
 
         return new TypeFilteredOutStream(
