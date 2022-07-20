@@ -173,7 +173,7 @@ export function includes<T>(collection: Iterable<T>, value: T) {
 
 export function join(
     collection: Iterable<any>,
-    separator: string = ""
+    separator: string = ","
 ): string {
     if (isArray(collection)) return collection.join(separator);
 
@@ -187,7 +187,7 @@ export function join(
         result.push(separator);
         result.push(next.value);
     }
-    return result.join();
+    return result.join("");
 }
 
 /** Signal for breaking out of a loop. */
