@@ -1159,15 +1159,18 @@ export default class Stream<T> implements Iterable<T> {
     ): Stream<T> | number {
         const stopwatch = new Stopwatch();
 
-        stopwatch.start();
-        const result = [...this];
-        stopwatch.stop();
-
-        if (takeTime === undefined) return stopwatch.elapsedTimeInMilliseconds;
-
-        takeTime(stopwatch.elapsedTimeInMilliseconds);
-
-        return Stream.of(result);
+        if (takeTime === undefined) {
+            stopwatch.start();
+            for (const value of this);
+            stopwatch.stop();
+            return stopwatch.elapsedTimeInMilliseconds;
+        } else {
+            stopwatch.start();
+            const result = [...this];
+            stopwatch.stop();
+            takeTime(stopwatch.elapsedTimeInMilliseconds);
+            return Stream.of(result);
+        }
     }
 
     public toString() {

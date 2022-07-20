@@ -96,7 +96,7 @@ async function main() {
         .asArray();
 
     const timeToRun = sw.elapsedTimeInMilliseconds;
-    // console.log(inspect(result, false, null, true));
+    console.log(inspect(result, false, null, true));
     console.log(`Ran query in ${timeToRun} milliseconds.`);
 
     // console.log(inspect(customers.groupJoin(customers, c => c.first_name, oc => oc.first_name, ())))
