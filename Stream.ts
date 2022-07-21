@@ -62,6 +62,7 @@ import {
     skipSparse,
     takeSparse,
     ValueOf,
+    IsWhitespaceOnly,
 } from "./utils";
 
 export interface StreamSourceProperties<T> {
@@ -76,11 +77,13 @@ export default class Stream<T> implements Iterable<T> {
     protected readonly getSource: () => Iterable<T>;
     protected readonly sourceProperties: StreamSourceProperties<T>;
 
-    /** For the case of a Stream of a Stream of a Stream of a Stream... etc. @returns The base most source (which isn't a stream). */
+    protected static getBaseSourceOf<T>(source: Iterable<T>) {
+        while (source instanceof Stream) source = source.getSource();
+        return source;
+    }
+
     protected getBaseSource() {
-        let current: Iterable<T> = this.getSource();
-        while (current instanceof Stream) current = current.getSource();
-        return current;
+        return Stream.getBaseSourceOf(this.getSource());
     }
 
     public constructor(
@@ -141,7 +144,7 @@ export default class Stream<T> implements Iterable<T> {
 
     /** @returns An iterator over the Stream. */
     public [Symbol.iterator]() {
-        return this.getSource()[Symbol.iterator]();
+        return Stream.getBaseSourceOf(this.getSource())[Symbol.iterator]();
     }
 
     /**
@@ -174,7 +177,7 @@ export default class Stream<T> implements Iterable<T> {
     /**
      * Filters the stream to values of the specified type. Use {@link TypeFilteredStream.and} to add more constraints.
      */
-    public filterToType<Option extends TypeFilterOption>(
+    public filterTo<Option extends TypeFilterOption>(
         option: Option
     ): TypeFilteredStream<T, Option> {
         return new TypeFilteredStream(
@@ -187,9 +190,9 @@ export default class Stream<T> implements Iterable<T> {
     /**
      * Filters the stream to values that aren't the specified type. Use {@link TypeFilteredOutStream.and} to add more constraints.
      */
-    filterOutType<Option extends TypeFilterOption>(
+    filterOut<Option extends TypeFilterOption>(
         option: Option
-    ): TypeFilteredOutStream<T, TypeFilterOutTest<Option, T>> {
+    ): TypeFilteredOutStream<T, Option, TypeFilterOutTest<Option, T>> {
         return new TypeFilteredOutStream(
             this.getSource,
             [getTypeFilterTest<T>(option)],
@@ -626,7 +629,7 @@ export default class Stream<T> implements Iterable<T> {
         });
     }
 
-    /** Keeps only the values in the Stream that aren't undefined. For more advanced type filtering try {@link filterToType} and {@link filterOutType}. */
+    /** Keeps only the values in the Stream that aren't undefined. For more advanced type filtering try {@link filterTo} and {@link filterOut}. */
     public defined(): Stream<T extends undefined ? never : T> {
         return new Stream(
             eager(filter(this, value => value !== undefined)),
@@ -634,7 +637,7 @@ export default class Stream<T> implements Iterable<T> {
         ) as any;
     }
 
-    /** Keeps only the values in the Stream that aren't null. For more advanced type filtering try {@link filterToType} and {@link filterOutType}. */
+    /** Keeps only the values in the Stream that aren't null. For more advanced type filtering try {@link filterTo} and {@link filterOut}. */
     public nonNull(): Stream<T extends null ? never : T> {
         return new Stream(
             eager(filter(this, value => value !== null)),
@@ -648,9 +651,10 @@ export default class Stream<T> implements Iterable<T> {
      * If the Array does not need to be modifiable, consider using {@link asArray} instead.
      */
     public toArray(): T[] {
-        const source = this.getSource();
+        let source = this.getSource();
         if (this.sourceProperties.oneOff && Array.isArray(source))
-            return source as T[];
+            return source;
+        source = Stream.getBaseSourceOf(source);
 
         return [...source];
     }
@@ -661,9 +665,10 @@ export default class Stream<T> implements Iterable<T> {
      * If the Set does not need to be modifiable, consider using {@link asSet} instead.
      */
     public toSet(): Set<T> {
-        const source = this.getSource();
+        let source = this.getSource();
         if (this.sourceProperties.oneOff && source instanceof Set)
-            return source as Set<T>;
+            return source;
+        source = Stream.getBaseSourceOf(source);
 
         return new Set(source);
     }
@@ -699,7 +704,7 @@ export default class Stream<T> implements Iterable<T> {
         keySelector?: (value: T, index: number) => K,
         valueSelector?: (value: T, index: number) => V
     ): ReadonlyMap<K, V> {
-        const source = this.getSource();
+        let source = this.getSource();
         if (
             this.sourceProperties.oneOff &&
             keySelector === undefined &&
@@ -707,16 +712,20 @@ export default class Stream<T> implements Iterable<T> {
             source instanceof Map
         )
             return source;
+
+        source = Stream.getBaseSourceOf(source);
+
         return toMap(source, keySelector as any, valueSelector as any);
     }
 
     public toSolid(): Solid<T> {
-        const source = this.getSource();
+        let source = this.getSource();
         if (this.sourceProperties.oneOff) {
             if (Array.isArray(source)) return source;
             if (source instanceof Set) return source;
             if (source instanceof Map) return source as any;
         }
+        source = Stream.getBaseSourceOf(source);
         return [...source];
     }
 
@@ -727,9 +736,9 @@ export default class Stream<T> implements Iterable<T> {
     public asArray() {
         if (this.sourceProperties.immutable) {
             if (this.cache_asArray === undefined)
-                this.cache_asArray = asArray(this.getSource());
+                this.cache_asArray = asArray(this.getBaseSource());
         }
-        return asArray(this.getSource());
+        return asArray(this.getBaseSource());
     }
 
     private cache_asSet?: ReadonlySet<T>;
@@ -739,10 +748,10 @@ export default class Stream<T> implements Iterable<T> {
     public asSet() {
         if (this.sourceProperties.immutable) {
             if (this.cache_asSet === undefined)
-                this.cache_asSet = asSet(this.getSource());
+                this.cache_asSet = asSet(this.getBaseSource());
             return this.cache_asSet;
         }
-        return asSet(this.getSource());
+        return asSet(this.getBaseSource());
     }
 
     private cache_asMapParameterless?: ReadonlyMap<any, any>;
@@ -755,10 +764,10 @@ export default class Stream<T> implements Iterable<T> {
         : ReadonlyMap<unknown, unknown> {
         if (this.sourceProperties.immutable) {
             if (this.cache_asMapParameterless === undefined)
-                this.cache_asMapParameterless = asMap(this.getSource());
+                this.cache_asMapParameterless = asMap(this.getBaseSource());
             return this.cache_asMapParameterless as any;
         }
-        return asMap(this.getSource());
+        return asMap(this.getBaseSource());
     }
 
     /**
@@ -793,7 +802,7 @@ export default class Stream<T> implements Iterable<T> {
         if (keySelector === undefined && valueSelector === undefined)
             return this.asMapParameterless() as any;
         return asMap(
-            this.getSource(),
+            this.getBaseSource(),
             keySelector as any,
             valueSelector as any
         );
@@ -803,10 +812,10 @@ export default class Stream<T> implements Iterable<T> {
     public asSolid(): ReadonlySolid<T> {
         if (this.sourceProperties.immutable) {
             if (this.cache_asSolid === undefined)
-                this.cache_asSolid = asSolid(this.getSource());
+                this.cache_asSolid = asSolid(this.getBaseSource());
             return this.cache_asSolid;
         }
-        return asSolid(this.getSource());
+        return asSolid(this.getBaseSource());
     }
 
     /**
@@ -876,7 +885,7 @@ export default class Stream<T> implements Iterable<T> {
 
     /** @returns Whether the stream contains the given value. */
     public includes(value: T): boolean {
-        return includes(this.getSource(), value);
+        return includes(this.getBaseSource(), value);
     }
 
     /** @returns Whether the Stream contains any values. */
@@ -962,7 +971,7 @@ export default class Stream<T> implements Iterable<T> {
 
     /** @returns The last value in the Stream or undefined if the Stream is empty. */
     public last(): T | undefined {
-        return last(this.getSource());
+        return last(this.getBaseSource());
     }
 
     /**
@@ -995,7 +1004,7 @@ export default class Stream<T> implements Iterable<T> {
 
     /** @returns The value at the given index or the value at the given negative index from the end of the Stream (-1 returns the last value, -2 returns the second to last value, etc.).*/
     public at(index: number | bigint) {
-        return at(this.getSource(), index);
+        return at(this.getBaseSource(), index);
     }
 
     /**
@@ -1003,7 +1012,7 @@ export default class Stream<T> implements Iterable<T> {
      * @returns The number of values in the Stream.
      * */
     public count(): number {
-        return count(this.getSource());
+        return count(this.getBaseSource());
     }
 
     /**
@@ -1051,7 +1060,7 @@ export default class Stream<T> implements Iterable<T> {
      * @returns The Streams length or undefined if the length could not be found without iterating the Stream.
      */
     public getNonIteratedCountOrUndefined(): number | undefined {
-        return getNonIteratedCountOrUndefined(this.getSource());
+        return getNonIteratedCountOrUndefined(this.getBaseSource());
     }
 
     /**
@@ -1199,7 +1208,8 @@ export type TypeFilterOption =
     | "object"
     | "function"
     | "0"
-    | "0n";
+    | "0n"
+    | "emptyString";
 
 export type TypeFilterTest<Option extends TypeFilterOption, T> =
     | never
@@ -1261,6 +1271,10 @@ export type TypeFilterTest<Option extends TypeFilterOption, T> =
         : never
     : Option extends "0n"
     ? T extends 0n
+        ? T
+        : never
+    : Option extends "emptyString"
+    ? T extends ""
         ? T
         : never
     : never;
@@ -1327,6 +1341,10 @@ export type TypeFilterOutTest<Option extends TypeFilterOption, T> =
     ? T extends 0n
         ? never
         : T
+    : Option extends "emptyString"
+    ? T extends ""
+        ? never
+        : T
     : T;
 
 function getTypeFilterTest<Original>(
@@ -1364,6 +1382,8 @@ function getTypeFilterTest<Original>(
             return value => (value as any) === 0;
         case "0n":
             return value => (value as any) === 0n;
+        case "emptyString":
+            return value => (value as any) === "";
     }
 }
 
@@ -1390,10 +1410,10 @@ export class TypeFilteredStream<
     }
 
     /**
-     * Adds another type constaint.
+     * Adds another type constraint.
      */
     public and<Option extends TypeFilterOption>(
-        option: Option
+        option: Option extends Options ? never : Option
     ): TypeFilteredStream<Original, Options | Option> {
         let test = getTypeFilterTest<Original>(option);
 
@@ -1405,7 +1425,11 @@ export class TypeFilteredStream<
     }
 }
 
-export class TypeFilteredOutStream<Original, Result> extends Stream<Result> {
+export class TypeFilteredOutStream<
+    Original,
+    Options extends TypeFilterOption,
+    Result
+> extends Stream<Result> {
     private readonly tests: Iterable<(value: Original) => boolean>;
     private readonly originalGetSource: () => Iterable<Original>;
     public constructor(
@@ -1425,11 +1449,15 @@ export class TypeFilteredOutStream<Original, Result> extends Stream<Result> {
     }
 
     /**
-     * Adds another type constaint.
+     * Adds another type constraint.
      */
     public and<Option extends TypeFilterOption>(
-        option: Option
-    ): TypeFilteredOutStream<Original, TypeFilterOutTest<Option, Result>> {
+        option: Option extends Options ? never : Option
+    ): TypeFilteredOutStream<
+        Original,
+        Options | Option,
+        TypeFilterOutTest<Option, Result>
+    > {
         let test = getTypeFilterTest<Original>(option);
 
         return new TypeFilteredOutStream(

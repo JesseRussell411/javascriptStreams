@@ -60,7 +60,10 @@ export function map<T, R>(
     });
 }
 
-export function filter<T>(collection: Iterable<T>, test: (value: T, index: number) => boolean): Iterable<T>;
+export function filter<T>(
+    collection: Iterable<T>,
+    test: (value: T, index: number) => boolean
+): Iterable<T>;
 export function filter<T>(
     collection: Iterable<T>,
     test: (value: T, index: number) => boolean
@@ -276,6 +279,19 @@ export function count(collection: Iterable<any>): number {
     return size;
 }
 export type ValueOf<T> = T[keyof T];
+
+export type WhitespaceCharacter = " " | "\n" | "\t" | "\r" | "\v" | "\f";
+export type IsWhitespaceOnly<T> = T extends WhitespaceCharacter
+    ? true
+    : T extends `${WhitespaceCharacter}${infer Rest}`
+    ? IsWhitespaceOnly<Rest>
+    : false;
+
+export type Includes<
+    Haystack extends string,
+    Needle extends string | number | bigint | boolean | null | undefined
+> = Haystack extends `${string}${Needle}${string}` ? true : false;
+
 
 export function asNumber(
     value: boolean | number | bigint | null | undefined

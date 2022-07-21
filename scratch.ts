@@ -101,31 +101,31 @@ async function main() {
     const nandb = Stream.of([
         1,
         2,
+        3,
+        0,
+        4n,
         0n,
-
         "sas;dlkfj",
         true,
         false,
         false,
         () => 21,
+        "",
+        "",
         [10, 20, 30],
         null,
         undefined,
         { b: 7 },
+        Symbol(),
+        "\n   ",
     ] as const)
-        .filterOutType("undefined")
-        .and("function")
-        .and("object")
-        .and("array")
+        .filterOut("emptyString")
+        .and("number")
+        .and("bigint")
+        .and("string")
         .and("0")
-        .and("0n")
         .skip(0);
     console.log(nandb.asArray());
-
-    const nandbcopy = nandb.solidify();
-    console.log(
-        nandb.sequenceEqual([1, 2, "sas;dlkfj", true, true, false, null])
-    );
 
     // console.log(inspect(customers.groupJoin(customers, c => c.first_name, oc => oc.first_name, ())))
 
