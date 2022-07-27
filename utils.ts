@@ -270,15 +270,26 @@ export function reverse<T>(collection: Iterable<T>): Iterable<T> {
 }
 
 export function count(collection: Iterable<any>): number {
-    if (isArray(collection)) return collection.length;
-    if (isSet(collection)) return collection.size;
+    if (Array.isArray(collection)) return collection.length;
+    if (collection instanceof Set) return collection.size;
     if (collection instanceof Map) return collection.size;
 
     let size = 0;
     for (const _ of collection) size++;
     return size;
 }
+
 export type ValueOf<T> = T[keyof T];
+
+export type Difference<T, Exclude> = T extends Exclude ? never : T;
+export type Intersection<A, B> = A extends B ? A : never;
+
+export type KeyOfArray<T extends readonly any[] | any[]> = Intersection<
+    keyof T,
+    number
+>;
+
+export type ValueOfArray<T extends readonly any[] | any[]> = T[KeyOfArray<T>];
 
 export type WhitespaceCharacter = " " | "\n" | "\t" | "\r" | "\v" | "\f";
 export type IsWhitespaceOnly<T> = T extends WhitespaceCharacter

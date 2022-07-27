@@ -4,10 +4,11 @@ import { getTestData } from "./getTestData";
 import {
     breakSignal,
     DeLiteral,
+    distinct,
     isArray,
     random,
     range,
-    ValueOf,
+    ValueOfArray,
 } from "./utils";
 import { inspect } from "util";
 import Stopwatch from "./javascriptStopwatch/stopwatch";
@@ -124,12 +125,12 @@ async function main() {
         .benchmark(time => console.log("map: " + time))
 
         .takeSparse(10)
+        .repeat(2)
         .benchmark(time => console.log("takeSparse: " + time))
-
         .asArray();
 
     const timeToRun = sw.elapsedTimeInMilliseconds;
-    // console.log(inspect(result, false, null, true));
+    console.log(inspect(result, false, null, true));
     console.log(`Ran query in ${timeToRun} milliseconds.`);
     const nandb = Stream.of([
         1,
