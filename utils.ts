@@ -292,7 +292,6 @@ export type Includes<
     Needle extends string | number | bigint | boolean | null | undefined
 > = Haystack extends `${string}${Needle}${string}` ? true : false;
 
-
 export function asNumber(
     value: boolean | number | bigint | null | undefined
 ): number {
@@ -1022,7 +1021,7 @@ export function takeSparse<T>(
     if (count < 0)
         throw new Error(`count must be 0 or greater but ${count} was given`);
 
-    if (count === 0) return Stream.empty<T>();
+    if (count === 0) return empty<T>();
 
     const solid = asSolid(collection);
     const sourceLength = getNonIteratedCount(solid);

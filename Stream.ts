@@ -391,7 +391,7 @@ export default class Stream<T> implements Iterable<T> {
      */
     public takeSparse(count: number | bigint) {
         return new Stream(
-            eager(takeSparse(this, count)),
+            eager(takeSparse(this.getBaseSource(), count)),
             this.sourceProperties
         );
     }
@@ -403,7 +403,7 @@ export default class Stream<T> implements Iterable<T> {
      */
     public skipSparse(count: number | bigint) {
         return new Stream(
-            eager(skipSparse(this, count)),
+            eager(skipSparse(this.getBaseSource(), count)),
             this.sourceProperties
         );
     }
@@ -1166,7 +1166,7 @@ export class OrderedStream<T> extends Stream<T> {
                         ? (source as T[])
                         : [...source];
 
-                        console.log("sorting by: " + [...orderedBy])
+                console.log("sorting by: " + [...orderedBy]);
                 sorted.sort((a, b) => multiCompare(a, b, orderedBy));
                 return sorted;
             },

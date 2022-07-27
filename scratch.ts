@@ -155,8 +155,9 @@ async function main() {
         .filterOut("emptyString")
         .and("number")
         .and("bigint")
-        .and("string")
         .and("0")
+        .and("string")
+        .and("0n")
         .skip(0);
     console.log(nandb.asArray());
 
