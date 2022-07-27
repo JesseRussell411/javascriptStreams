@@ -1,7 +1,14 @@
 import Stream from "./Stream";
 import { StreamableArray } from "./Streamable";
 import { getTestData } from "./getTestData";
-import { DeLiteral, isArray, random, range, ValueOf } from "./utils";
+import {
+    breakSignal,
+    DeLiteral,
+    isArray,
+    random,
+    range,
+    ValueOf,
+} from "./utils";
 import { inspect } from "util";
 import Stopwatch from "./javascriptStopwatch/stopwatch";
 
@@ -61,6 +68,32 @@ async function main() {
         1000
     ).lazySolidify();
 
+    const customersOrdered = customers
+        .shuffle()
+        .map(c => ({ ...c, s: c.gender + " " + c.first_name + " " + c.id }))
+        .orderBy(c => c.gender)
+        .lazySolidify();
+
+    console.log(
+        customersOrdered
+            .thenBy(c => c.first_name)
+            .map(c => c.s)
+            .asArray()
+    );
+    console.log(
+        customersOrdered
+            .thenBy(c => c.id)
+            .map(c => c.s)
+            .asArray()
+    );
+    console.log(customersOrdered.map(c => c.s).asArray());
+    customersOrdered.solidify();
+    customersOrdered.solidify();
+    customersOrdered.solidify();
+    customersOrdered.solidify();
+    customersOrdered.solidify();
+    customersOrdered.solidify();
+
     const sw = new Stopwatch();
     console.log("start...");
     sw.restart();
@@ -96,7 +129,7 @@ async function main() {
         .asArray();
 
     const timeToRun = sw.elapsedTimeInMilliseconds;
-    console.log(inspect(result, false, null, true));
+    // console.log(inspect(result, false, null, true));
     console.log(`Ran query in ${timeToRun} milliseconds.`);
     const nandb = Stream.of([
         1,

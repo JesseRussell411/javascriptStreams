@@ -69,9 +69,6 @@ export interface StreamSourceProperties<T> {
     oneOff?: boolean;
     immutable?: boolean;
 }
-export type OrderedStreamSourceProperties<T> = StreamSourceProperties<T>;
-export type MappedStreamSourceProperties<T> = StreamSourceProperties<T>;
-export type FilteredStreamSourceProperties<T> = StreamSourceProperties<T>;
 
 export default class Stream<T> implements Iterable<T> {
     protected readonly getSource: () => Iterable<T>;
@@ -1151,30 +1148,37 @@ export default class Stream<T> implements Iterable<T> {
 export class OrderedStream<T> extends Stream<T> {
     protected readonly orderedBy: Iterable<Order<T>>;
     protected readonly originalGetSource: () => Iterable<T>;
-    protected readonly sourceProperties: OrderedStreamSourceProperties<T>;
+    protected readonly getPreSortedSource?: () => Iterable<T>;
 
     public constructor(
         getSource: () => Iterable<T>,
         orderedBy: Iterable<Order<T>>,
-        sourceProperties: OrderedStreamSourceProperties<T> = {}
+        sourceProperties: StreamSourceProperties<T> = {},
+        getPreSortedSource?: () => Iterable<T>
     ) {
         super(
             () => {
+                if (getPreSortedSource !== undefined)
+                    return getPreSortedSource();
                 const source = getSource();
                 const sorted: T[] =
                     sourceProperties.oneOff && Array.isArray(source)
                         ? (source as T[])
                         : [...source];
 
+                        console.log("sorting by: " + [...orderedBy])
                 sorted.sort((a, b) => multiCompare(a, b, orderedBy));
                 return sorted;
             },
-            { oneOff: true }
+            {
+                oneOff:
+                    sourceProperties.oneOff ??
+                    (getPreSortedSource === undefined ? true : false),
+            }
         );
 
         this.originalGetSource = getSource;
         this.orderedBy = orderedBy;
-        this.sourceProperties = sourceProperties;
     }
 
     public thenBy(comparator: Comparator<T>): OrderedStream<T>;
@@ -1191,6 +1195,24 @@ export class OrderedStream<T> extends Stream<T> {
     public thenByDescending(keySelector: (value: T) => any): OrderedStream<T>;
     public thenByDescending(order: Order<T>): OrderedStream<T> {
         return this.thenBy(reverseOrder(order));
+    }
+
+    public solidify(): OrderedStream<T> {
+        return new OrderedStream(
+            this.originalGetSource,
+            this.orderedBy,
+            {},
+            eager(this.asArray())
+        );
+    }
+
+    public lazySolidify(): OrderedStream<T> {
+        return new OrderedStream(
+            this.originalGetSource,
+            this.orderedBy,
+            {},
+            lazy(() => this.asArray())
+        );
     }
 }
 
