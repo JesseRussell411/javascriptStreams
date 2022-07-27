@@ -1,11 +1,12 @@
 import Stream from "./Stream";
-import { ValueOf } from "./utils";
+import { ValueOfArray } from "./utils";
 
 export interface Streamable<T> {
     stream: () => Stream<T>;
 }
 
-export type StreamableTuple<T extends any[]> = T & StreamableArray<ValueOf<T>>;
+export type StreamableTuple<T extends readonly any[] | any[]> = T &
+    StreamableArray<ValueOfArray<T>>;
 
 export class StreamableArray<T> extends Array<T> implements Streamable<T> {
     public stream(): Stream<T> {

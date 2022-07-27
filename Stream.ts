@@ -2,7 +2,7 @@ import { ReadStream } from "fs";
 import Stopwatch from "./javascriptStopwatch/stopwatch";
 import getStopwatchClass from "./javascriptStopwatch/stopwatch";
 import { and, or } from "./logic";
-import { Streamable, StreamableArray, StreamableTuple } from "./Streamable";
+import { Streamable, StreamableArray } from "./Streamable";
 import {
     lazy,
     iter,

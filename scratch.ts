@@ -130,7 +130,7 @@ async function main() {
         .asArray();
 
     const timeToRun = sw.elapsedTimeInMilliseconds;
-    console.log(inspect(result, false, null, true));
+    // console.log(inspect(result, false, null, true));
     console.log(`Ran query in ${timeToRun} milliseconds.`);
     const nandb = Stream.of([
         1,

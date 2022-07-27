@@ -489,7 +489,9 @@ export type DeLiteral<T> = T extends number
 export type EntryLike<K, V> =
     | [K, V, ...any]
     | { 0: K; 1: V; [key: ObjectKey]: any };
+
 export type EntryLikeKey<K> = [K, ...any] | { 0: K; [key: ObjectKey]: any };
+
 export type EntryLikeValue<V> =
     | [any, V, ...any]
     | { 1: V; [key: ObjectKey]: any };
