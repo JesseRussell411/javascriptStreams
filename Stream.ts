@@ -110,7 +110,7 @@ export default class Stream<T> implements Iterable<T> {
 
     /** @returns A Stream of the generator from the given function. */
     public static iter<T>(generatorGetter: () => Generator<T>) {
-        return new Stream(() => iter(generatorGetter), {});
+        return new Stream(eager(iter(generatorGetter)), {});
     }
 
     public static range(
@@ -359,7 +359,7 @@ export default class Stream<T> implements Iterable<T> {
     public skipWhile(test: (value: T, index: number) => boolean) {
         const self = this;
         return new Stream(
-            () =>
+            eager(
                 iter(function* () {
                     let index = 0;
                     for (const value of self)
@@ -369,7 +369,8 @@ export default class Stream<T> implements Iterable<T> {
                         }
 
                     for (const value of self) yield value;
-                }),
+                })
+            ),
             { immutable: this.sourceProperties.immutable }
         );
     }
