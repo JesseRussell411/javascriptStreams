@@ -89,11 +89,6 @@ async function main() {
     );
     console.log(customersOrdered.map(c => c.s).asArray());
     customersOrdered.solidify();
-    customersOrdered.solidify();
-    customersOrdered.solidify();
-    customersOrdered.solidify();
-    customersOrdered.solidify();
-    customersOrdered.solidify();
 
     const sw = new Stopwatch();
     console.log("start...");
@@ -125,7 +120,6 @@ async function main() {
         .benchmark(time => console.log("map: " + time))
 
         .takeSparse(10)
-        .repeat(2)
         .benchmark(time => console.log("takeSparse: " + time))
         .asArray();
 

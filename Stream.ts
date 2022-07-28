@@ -63,6 +63,7 @@ import {
     takeSparse,
     ValueOfArray,
     IsWhitespaceOnly,
+    lazyCachedIterable,
 } from "./utils";
 
 export interface StreamSourceProperties<T> {
@@ -427,6 +428,7 @@ export default class Stream<T> implements Iterable<T> {
             );
         return new Stream(
             () => {
+                // TODO find a better way of doing this, there has to be a better way
                 const array = this.toArray();
                 for (let i = 0n; i < usableCount && array.length > 0; i++)
                     random.chooseAndRemove(array);
@@ -439,18 +441,36 @@ export default class Stream<T> implements Iterable<T> {
 
     public concat<O>(other: Iterable<O>): Stream<T | O> {
         const self = this;
-        return Stream.iter(function* () {
-            for (const value of self) yield value;
-            for (const value of other) yield value;
-        });
+        return new Stream(
+            () =>
+                iter(function* () {
+                    for (const value of self) yield value;
+                    for (const value of other) yield value;
+                }),
+            {
+                immutable:
+                    this.sourceProperties.immutable &&
+                    other instanceof Stream &&
+                    other.sourceProperties.immutable,
+            }
+        );
     }
 
     public unShift<O>(other: Iterable<O>): Stream<T | O> {
         const self = this;
-        return Stream.iter(function* () {
-            for (const value of other) yield value;
-            for (const value of self) yield value;
-        });
+        return new Stream(
+            () =>
+                iter(function* () {
+                    for (const value of other) yield value;
+                    for (const value of self) yield value;
+                }),
+            {
+                immutable:
+                    this.sourceProperties.immutable &&
+                    other instanceof Stream &&
+                    other.sourceProperties.immutable,
+            }
+        );
     }
 
     public insert<O>(other: Iterable<O>, at: number | bigint): Stream<T | O> {
@@ -458,15 +478,29 @@ export default class Stream<T> implements Iterable<T> {
         if (usableAt < 0n)
             throw new Error(`at must be 0 or greater but ${at} was given`);
         const self = this;
-        return Stream.iter(function* () {
-            const iter = self[Symbol.iterator]();
-            let next;
+        return new Stream(
+            eager(
+                iter(function* () {
+                    const iter = self[Symbol.iterator]();
+                    let next;
 
-            for (let i = 0n; i < usableAt && !(next = iter.next()).done; i++)
-                yield next.value;
-            for (const value of other) yield value;
-            while (!(next = iter.next()).done) yield next.value;
-        });
+                    for (
+                        let i = 0n;
+                        i < usableAt && !(next = iter.next()).done;
+                        i++
+                    )
+                        yield next.value;
+                    for (const value of other) yield value;
+                    while (!(next = iter.next()).done) yield next.value;
+                })
+            ),
+            {
+                immutable:
+                    this.sourceProperties.immutable &&
+                    other instanceof Stream &&
+                    other.sourceProperties.immutable,
+            }
+        );
     }
 
     public insertSingle(value: T, at: number | bigint) {
@@ -492,7 +526,7 @@ export default class Stream<T> implements Iterable<T> {
 
                     while (!(next = iter.next()).done) yield next.value;
                 }),
-            { immutable: this.sourceProperties.immutable }
+            this.sourceProperties
         );
     }
 
@@ -533,7 +567,7 @@ export default class Stream<T> implements Iterable<T> {
             );
 
         const self = this;
-        return new Stream(
+        return new Stream<T>(
             () =>
                 iter(function* () {
                     const iter = self[Symbol.iterator]();
@@ -1164,13 +1198,17 @@ export class OrderedStream<T> extends Stream<T> {
             () => {
                 if (getPreSortedSource !== undefined)
                     return getPreSortedSource();
+
                 const source = getSource();
                 const sorted: T[] =
                     sourceProperties.oneOff && Array.isArray(source)
                         ? (source as T[])
                         : [...source];
 
-                sorted.sort((a, b) => multiCompare(a, b, orderedBy));
+                sorted.sort((a, b) =>
+                    multiCompare(a, b, lazyCachedIterable(orderedBy))
+                );
+
                 return sorted;
             },
             {

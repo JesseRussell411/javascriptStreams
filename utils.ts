@@ -34,6 +34,21 @@ export function lazy<T>(getter: () => T): () => T {
     return () => resultGetter();
 }
 
+export function lazyCachedIterable<T>(iterable: Iterable<T>) {
+    const cache: T[] = [];
+    const iterator = iterable[Symbol.iterator]();
+    
+    return iter(function* () {
+        for (const value of cache) yield value;
+
+        let next;
+        while (!(next = iterator.next()).done) {
+            cache.push(next.value);
+            yield next.value;
+        }
+    });
+}
+
 /** @returns An Iterable over the Generator from the given function */
 export function iter<T>(generatorGetter: () => Generator<T>) {
     return {
