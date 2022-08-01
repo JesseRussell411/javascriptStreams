@@ -242,15 +242,53 @@ export function setAndGet<K, MV, V extends MV>(
 
 /**
  * @returns The last value in the given Iterable.
+ * @throws If the Stream is empty.
  */
 export function last<T>(collection: Iterable<T>) {
+    function throwEmtpyError() {
+        throw new Error("collection has no last value because it is empty");
+    }
     if (isArray(collection)) {
         if (collection.length > 0) return collection[collection.length - 1];
-        return undefined;
+        else throwEmtpyError();
     }
 
-    let last: T | undefined = undefined;
-    for (const value of collection) last = value;
+    const iter = collection[Symbol.iterator]();
+    let next = iter.next();
+
+    if (next.done) throwEmtpyError();
+
+    let last: T = next.value;
+    while (!(next = iter.next()).done) last = next.value;
+    return last;
+}
+
+/**
+ * @returns The last value in the given Iterable or undefined if the Stream is empty.
+ */
+export function lastOrUndefined<T>(collection: Iterable<T>): T | undefined {
+    return lastOrDefault(collection, () => undefined);
+}
+
+/**
+ * @returns The last value in the given Iterable or the default value if the Stream is empty.
+ */
+export function lastOrDefault<T, D>(
+    collection: Iterable<T>,
+    getDefault: () => D
+): T | D {
+    if (isArray(collection)) {
+        if (collection.length > 0) return collection[collection.length - 1];
+        else return getDefault();
+    }
+
+    const iter = collection[Symbol.iterator]();
+    let next = iter.next();
+
+    if (next.done) return getDefault();
+
+    let last: T = next.value;
+    while (!(next = iter.next()).done) last = next.value;
     return last;
 }
 
@@ -936,9 +974,7 @@ export class Random {
         return at(options, this.int(0, size))!;
     };
 
-    chooseAndRemove = <T>(
-        options: Solid<T>
-    ): T => {
+    chooseAndRemove = <T>(options: Solid<T>): T => {
         const size = getNonIteratedCount(options);
         if (size === 0) throw new Error("no options to choose from");
         if (Array.isArray(options)) {

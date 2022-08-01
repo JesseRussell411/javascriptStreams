@@ -64,6 +64,8 @@ import {
     ValueOfArray,
     IsWhitespaceOnly,
     lazyCachedIterable,
+    lastOrUndefined,
+    lastOrDefault,
 } from "./utils";
 
 export interface StreamSourceProperties<T> {
@@ -204,7 +206,7 @@ export default class Stream<T> implements Iterable<T> {
 
         const self = this;
         return new Stream(
-            () =>
+            eager(
                 iter(function* () {
                     const cache: T[] = [];
 
@@ -218,7 +220,8 @@ export default class Stream<T> implements Iterable<T> {
                         for (; i < usableTimes; i++)
                             for (const value of cache) yield value;
                     }
-                }),
+                })
+            ),
             { immutable: this.sourceProperties.immutable }
         );
     }
@@ -504,7 +507,7 @@ export default class Stream<T> implements Iterable<T> {
         );
     }
 
-    public insertSingle(value: T, at: number | bigint) {
+    public insertValue(value: T, at: number | bigint) {
         const usableAt = BigInt(at);
         if (usableAt < 0n)
             throw new Error(`at must be 0 or greater but ${at} was given`);
@@ -1000,13 +1003,41 @@ export default class Stream<T> implements Iterable<T> {
     }
 
     /** @returns The first value in the Stream or undefined if the Stream is empty. */
-    public first(): T | undefined {
+    public firstOrUndefined(): T | undefined {
         for (const value of this) return value;
         return undefined;
     }
 
     /** @returns The last value in the Stream or undefined if the Stream is empty. */
-    public last(): T | undefined {
+    public lastOrUndefined(): T | undefined {
+        return lastOrUndefined(this.getBaseSource());
+    }
+
+    /** @returns The first value in the Stream or the default value if the Stream is empty. */
+    public firstOrDefault<D>(getDefault: () => D): T | D {
+        for (const value of this) return value;
+        return getDefault();
+    }
+
+    /** @returns The last value in the Stream or the default value if the Stream is empty. */
+    public lastOrDefault<D>(getDefault: () => D): T | D {
+        return lastOrDefault(this.getBaseSource(), getDefault);
+    }
+
+    /**
+     * @returns The first value in the Stream.
+     * @throws If the Stream is empty.
+     */
+    public first(): T {
+        for (const value of this) return value;
+        throw new Error("Stream has no first value because it it emtpy");
+    }
+
+    /**
+     * @returns The last value in the Stream.
+     * @throws If the Stream is empty.
+     */
+    public last(): T {
         return last(this.getBaseSource());
     }
 
@@ -1024,7 +1055,7 @@ export default class Stream<T> implements Iterable<T> {
 
     public random(count?: number | bigint): Stream<T> | T {
         if (count === undefined) return random.choice(this.asSolid());
-        
+
         const usableCount = BigInt(count);
         if (usableCount < 0)
             throw new Error(
@@ -1478,7 +1509,7 @@ export class TypeFilteredStream<
     public and<Option extends TypeFilterOption>(
         option: Option extends Options ? never : Option
     ): TypeFilteredStream<Options | Option, TypeFilterTest<Option, Result>> {
-        let test = getTypeFilterTest(option);
+        const test = getTypeFilterTest(option);
 
         return new TypeFilteredStream(
             this.originalGetSource,
@@ -1533,7 +1564,7 @@ export class TypeFilteredOutStream<
         Options | Option,
         TypeFilterOutTest<Option, Result>
     > {
-        let test = getTypeFilterTest(option);
+        const test = getTypeFilterTest(option);
 
         return new TypeFilteredOutStream(
             this.originalGetSource,
