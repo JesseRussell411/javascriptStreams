@@ -69,27 +69,6 @@ async function main() {
         1000
     ).lazySolidify();
 
-    const customersOrdered = customers
-        .shuffle()
-        .map(c => ({ ...c, s: c.gender + " " + c.first_name + " " + c.id }))
-        .orderBy(c => c.gender)
-        .lazySolidify();
-
-    console.log(
-        customersOrdered
-            .thenBy(c => c.first_name)
-            .map(c => c.s)
-            .asArray()
-    );
-    console.log(
-        customersOrdered
-            .thenBy(c => c.id)
-            .map(c => c.s)
-            .asArray()
-    );
-    console.log(customersOrdered.map(c => c.s).asArray());
-    customersOrdered.solidify();
-
     const sw = new Stopwatch();
     console.log("start...");
     sw.restart();
@@ -113,6 +92,12 @@ async function main() {
         .thenBy(c => c.first_name)
         .thenBy(c => c.last_name)
         .thenBy(c => c.id)
+
+        // .orderBy(c => c.id)
+        // .orderBy(c => c.last_name)
+        // .orderBy(c => c.first_name)
+        // .orderBy(c => c.purchases.length)
+
         .benchmark(time => console.log("orderBy: " + time))
 
         .map(c => ({ ...c, net_worth: random.range(-10, 10) }))
@@ -153,8 +138,10 @@ async function main() {
         .and("0")
         .and("string")
         .and("0n")
+        .and("undefined")
         .skip(0);
-    console.log(nandb.asArray());
+
+    // console.log(nandb.asArray());
 
     // console.log(inspect(customers.groupJoin(customers, c => c.first_name, oc => oc.first_name, ())))
 

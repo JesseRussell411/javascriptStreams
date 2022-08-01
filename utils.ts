@@ -37,7 +37,7 @@ export function lazy<T>(getter: () => T): () => T {
 export function lazyCachedIterable<T>(iterable: Iterable<T>) {
     const cache: T[] = [];
     const iterator = iterable[Symbol.iterator]();
-    
+
     return iter(function* () {
         for (const value of cache) yield value;
 
@@ -336,7 +336,7 @@ export interface SmartCompareOptions {
     compareArrays?: (a: readonly any[], b: readonly any[]) => number;
 }
 
-/** Compares two values in a way that makes more sense the default of {@link Array.sort}, which just compares by their ascii string values. Unlike {@link Array.sort}'s default comparison, This comparison function compares numbers by returning their difference. */
+/** Compares two values in a way that makes more sense than the default of {@link Array.sort}, which just compares by their ascii string values. Unlike {@link Array.sort}'s default comparison, This comparison function compares numbers by returning their difference. */
 export function smartCompare(
     a: any,
     b: any,
@@ -350,7 +350,7 @@ export function smartCompare(
             case "function":
                 return 1;
 
-            // array - 2
+            // array -- 2
 
             case "object":
                 return 3;
@@ -367,7 +367,7 @@ export function smartCompare(
             case "string":
                 return 7;
 
-            // null - 8
+            // null -- 8
 
             // Array.sort doesn't actually sort undefined values. It just puts all the undefineds at the end of the array even if the comparator says otherwise.
             // So I guess I'll just have to agree with Array.sort here
@@ -376,12 +376,13 @@ export function smartCompare(
         }
         return -1;
     }
-    // firts sort by type
+
+    // first sort by type
     const typeRatingA = rateType(a);
     const typeRatingB = rateType(b);
     if (typeRatingA !== typeRatingB) return typeRatingA - typeRatingB;
 
-    // then value
+    // then by value
 
     // numeric
     if (typeof a === "number") {
@@ -392,6 +393,13 @@ export function smartCompare(
         if (typeof b === "bigint") return Number(a - b);
     }
 
+    // boolean
+    if (typeof a === "boolean" && typeof b === "boolean") {
+        if (a === b) return 0;
+        if (a) return 1;
+        return -1;
+    }
+
     // arrays
     if (Array.isArray(a) && Array.isArray(b)) {
         if (options.compareArrays !== undefined)
@@ -399,6 +407,7 @@ export function smartCompare(
         else return a.length - b.length;
     }
 
+    // objects
     if (
         options.compareObjects !== undefined &&
         typeof a === "object" &&
@@ -408,6 +417,7 @@ export function smartCompare(
     )
         return options.compareObjects(a, b);
 
+    // if nothing else fits, then compare by string values.
     return `${a}`.localeCompare(`${b}`);
 }
 
@@ -920,17 +930,14 @@ export class Random {
         return Math.trunc(this.range(lowerBound, upperBound));
     };
 
-    choice = <T>(options: ReadonlySolid<T>): T => {
+    choice = <T>(options: ReadonlySolid<T> | Solid<T>): T => {
         const size = getNonIteratedCount(options);
         if (size === 0) throw new Error("no options to choose from");
         return at(options, this.int(0, size))!;
     };
 
     chooseAndRemove = <T>(
-        options:
-            | T[]
-            | Set<T>
-            | (T extends [infer K, infer V] ? Map<K, V> : never)
+        options: Solid<T>
     ): T => {
         const size = getNonIteratedCount(options);
         if (size === 0) throw new Error("no options to choose from");

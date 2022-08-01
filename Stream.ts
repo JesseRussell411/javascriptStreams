@@ -177,10 +177,10 @@ export default class Stream<T> implements Iterable<T> {
      */
     public filterTo<Option extends TypeFilterOption>(
         option: Option
-    ): TypeFilteredStream<T, Option> {
+    ): TypeFilteredStream<Option, TypeFilterTest<Option, T>> {
         return new TypeFilteredStream(
             this.getSource,
-            [getTypeFilterTest<T>(option)],
+            [getTypeFilterTest(option)],
             this.sourceProperties
         );
     }
@@ -190,10 +190,10 @@ export default class Stream<T> implements Iterable<T> {
      */
     filterOut<Option extends TypeFilterOption>(
         option: Option
-    ): TypeFilteredOutStream<T, Option, TypeFilterOutTest<Option, T>> {
+    ): TypeFilteredOutStream<Option, TypeFilterOutTest<Option, T>> {
         return new TypeFilteredOutStream(
             this.getSource,
-            [getTypeFilterTest<T>(option)],
+            [getTypeFilterTest(option)],
             this.sourceProperties
         );
     }
@@ -1024,6 +1024,7 @@ export default class Stream<T> implements Iterable<T> {
 
     public random(count?: number | bigint): Stream<T> | T {
         if (count === undefined) return random.choice(this.asSolid());
+        
         const usableCount = BigInt(count);
         if (usableCount < 0)
             throw new Error(
@@ -1411,9 +1412,7 @@ export type TypeFilterOutTest<Option extends TypeFilterOption, T> =
         : T
     : T;
 
-function getTypeFilterTest<Original>(
-    option: TypeFilterOption
-): (value: Original) => boolean {
+function getTypeFilterTest(option: TypeFilterOption): (value: any) => boolean {
     switch (option) {
         case "number":
             return value => typeof value === "number";
@@ -1452,15 +1451,15 @@ function getTypeFilterTest<Original>(
 }
 
 export class TypeFilteredStream<
-    Original,
-    Options extends TypeFilterOption
-> extends Stream<TypeFilterTest<Options, Original>> {
-    private readonly tests: Iterable<(value: Original) => boolean>;
-    private readonly originalGetSource: () => Iterable<Original>;
+    Options extends TypeFilterOption,
+    Result
+> extends Stream<Result> {
+    private readonly tests: Iterable<(value: any) => boolean>;
+    private readonly originalGetSource: () => Iterable<any>;
     public constructor(
-        getSource: () => Iterable<Original>,
-        tests: Iterable<(value: Original) => boolean>,
-        sourceProperties: StreamSourceProperties<Original>
+        getSource: () => Iterable<any>,
+        tests: Iterable<(value: any) => boolean>,
+        sourceProperties: StreamSourceProperties<any>
     ) {
         super(() => {
             return filter(getSource(), value => {
@@ -1478,8 +1477,8 @@ export class TypeFilteredStream<
      */
     public and<Option extends TypeFilterOption>(
         option: Option extends Options ? never : Option
-    ): TypeFilteredStream<Original, Options | Option> {
-        let test = getTypeFilterTest<Original>(option);
+    ): TypeFilteredStream<Options | Option, TypeFilterTest<Option, Result>> {
+        let test = getTypeFilterTest(option);
 
         return new TypeFilteredStream(
             this.originalGetSource,
@@ -1487,19 +1486,32 @@ export class TypeFilteredStream<
             this.sourceProperties
         ) as any;
     }
+
+    public solidify(): TypeFilteredStream<Options, Result> {
+        return new TypeFilteredStream(eager(this.toSolid()), [], {
+            immutable: true,
+        });
+    }
+
+    public lazySolidify(): TypeFilteredStream<Options, Result> {
+        return new TypeFilteredStream(
+            lazy(() => this.toSolid()),
+            [],
+            { immutable: true }
+        );
+    }
 }
 
 export class TypeFilteredOutStream<
-    Original,
     Options extends TypeFilterOption,
     Result
 > extends Stream<Result> {
-    private readonly tests: Iterable<(value: Original) => boolean>;
-    private readonly originalGetSource: () => Iterable<Original>;
+    private readonly tests: Iterable<(value: any) => boolean>;
+    private readonly originalGetSource: () => Iterable<any>;
     public constructor(
-        getSource: () => Iterable<Original>,
-        tests: Iterable<(value: Original) => boolean>,
-        sourceProperties: StreamSourceProperties<Original>
+        getSource: () => Iterable<any>,
+        tests: Iterable<(value: any) => boolean>,
+        sourceProperties: StreamSourceProperties<any>
     ) {
         super(() => {
             return filter(getSource(), value => {
@@ -1518,16 +1530,29 @@ export class TypeFilteredOutStream<
     public and<Option extends TypeFilterOption>(
         option: Option extends Options ? never : Option
     ): TypeFilteredOutStream<
-        Original,
         Options | Option,
         TypeFilterOutTest<Option, Result>
     > {
-        let test = getTypeFilterTest<Original>(option);
+        let test = getTypeFilterTest(option);
 
         return new TypeFilteredOutStream(
             this.originalGetSource,
             append(this.tests, test),
             this.sourceProperties
         ) as any;
+    }
+
+    public solidify(): TypeFilteredOutStream<Options, Result> {
+        return new TypeFilteredOutStream(eager(this.toSolid()), [], {
+            immutable: true,
+        });
+    }
+
+    public lazySolidify(): TypeFilteredOutStream<Options, Result> {
+        return new TypeFilteredOutStream(
+            lazy(() => this.toSolid()),
+            [],
+            { immutable: true }
+        );
     }
 }
