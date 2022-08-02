@@ -13,7 +13,6 @@ import {
     join,
     isIterable,
     breakSignal,
-    numberComparator,
     setAndGet,
     isArray,
     last,
@@ -51,7 +50,6 @@ import {
     Solid,
     isSolid,
     asSolid,
-    bigintComparator,
     alternating as alternating,
     getNonIteratedCount,
     alternatingSkip as removeAlternating,
@@ -134,8 +132,10 @@ export default class Stream<T> implements Iterable<T> {
     ): Stream<number>;
     public static range(end: number | bigint): Stream<number>;
 
-    public static range(arg1: any, arg2?: any, arg3?: any): any {
-        return new Stream(() => range(arg1, arg2, arg3), { immutable: true });
+    public static range(_startOrEnd: any, _end?: any, _step?: any): any {
+        return new Stream(eager(range(_startOrEnd, _end, _step)), {
+            immutable: true,
+        });
     }
 
     public static generate<T>(from: () => T, length: number | bigint) {
@@ -509,6 +509,8 @@ export default class Stream<T> implements Iterable<T> {
 
     public insertValue(value: T, at: number | bigint) {
         const usableAt = BigInt(at);
+
+        //TODO insert from end if at is negative
         if (usableAt < 0n)
             throw new Error(`at must be 0 or greater but ${at} was given`);
         const self = this;

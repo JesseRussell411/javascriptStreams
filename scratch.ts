@@ -103,6 +103,7 @@ async function main() {
         .map(c => ({ ...c, net_worth: random.range(-10, 10) }))
         .map(c => ({ ...c, self_worth: random.range(-10, 10) }))
         .benchmark(time => console.log("map: " + time))
+        .distinct(c => "" + c.state)
 
         .takeSparse(10)
         .benchmark(time => console.log("takeSparse: " + time))

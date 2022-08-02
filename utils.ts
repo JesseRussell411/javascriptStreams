@@ -210,7 +210,7 @@ export function join(
 }
 
 /** Signal for breaking out of a loop. */
-export const breakSignal = Symbol("breakSignal");
+export const breakSignal = Symbol("break signal");
 
 export function forEach<T>(
     collection: Iterable<T>,
@@ -220,14 +220,6 @@ export function forEach<T>(
     for (const value of collection) {
         if (callback(value, index++) === breakSignal) break;
     }
-}
-
-export function numberComparator(a: number, b: number): number {
-    return a - b;
-}
-
-export function bigintComparator(a: bigint, b: bigint): number {
-    return Number(a - b);
 }
 
 /** Adds the key and value to the map and the returns the value */
@@ -343,6 +335,7 @@ export type KeyOfArray<T extends readonly any[] | any[]> = Intersection<
 >;
 
 export type ValueOfArray<T extends readonly any[] | any[]> = T[KeyOfArray<T>];
+
 
 export type WhitespaceCharacter = " " | "\n" | "\t" | "\r" | "\v" | "\f";
 export type IsWhitespaceOnly<T> = T extends WhitespaceCharacter
@@ -722,7 +715,7 @@ export function range(_startOrEnd: any, _end?: any, _step?: any): any {
         step = Number(step);
     }
 
-    if (step === ZERO) throw new Error("Step must not be zero.");
+    if (step === ZERO) throw new Error("arg3 must not be zero");
 
     if (step < ZERO && start < end) return empty();
     if (step > ZERO && start > end) return empty();
@@ -857,10 +850,11 @@ export function getNonIteratedCountOrUndefined(
 
 export function distinct<T>(
     collection: Iterable<T>,
-    identifier: (value: T) => any = value => value
+    identifier: (value: T) => unknown = value => value
 ): Iterable<T> {
     return iter(function* () {
-        const returned = new Set<any>();
+        const returned = new Set<unknown>();
+
         for (const value of collection) {
             const id = identifier(value);
             if (!returned.has(id)) {
