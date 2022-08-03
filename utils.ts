@@ -1,6 +1,7 @@
 import Stream from "./Stream";
 import { and } from "./logic";
 import { StreamableArray } from "./Streamable";
+import { toASCII } from "punycode";
 
 /**
  * @returns Returns a function which returns the given value.
@@ -314,6 +315,34 @@ export function reverse<T>(collection: Iterable<T>): Iterable<T> {
     });
 }
 
+export function indexOf<T>(
+    collection: Iterable<T>,
+    value: T,
+    fromIndex?: number | bigint
+): number | undefined {
+    if (isArray(collection)) {
+        const result = collection.indexOf(
+            value,
+            fromIndex === undefined ? undefined : Number(fromIndex)
+        );
+        if (result === -1) return undefined;
+        return result;
+    }
+
+    if (fromIndex !== undefined && fromIndex > 0) {
+        const result = indexOf(skip(collection, fromIndex), value);
+        if (result === undefined) return undefined;
+        return result + Number(fromIndex);
+    }
+
+    let index = 0;
+    for (const collectionValue of collection) {
+        if (Object.is(value, collectionValue)) return index;
+        index++;
+    }
+    return undefined;
+}
+
 export function count(collection: Iterable<any>): number {
     if (Array.isArray(collection)) return collection.length;
     if (collection instanceof Set) return collection.size;
@@ -335,7 +364,6 @@ export type KeyOfArray<T extends readonly any[] | any[]> = Intersection<
 >;
 
 export type ValueOfArray<T extends readonly any[] | any[]> = T[KeyOfArray<T>];
-
 
 export type WhitespaceCharacter = " " | "\n" | "\t" | "\r" | "\v" | "\f";
 export type IsWhitespaceOnly<T> = T extends WhitespaceCharacter
@@ -1094,6 +1122,22 @@ export function takeSparse<T>(
         alternating(solid, BigInt(sourceLength) / usableCount),
         usableCount
     );
+}
+
+export function skip<T>(collection: Iterable<T>, count: number | bigint) {
+    const usableCount = BigInt(count);
+    if (usableCount <= 0n) return collection;
+
+    return iter(function* () {
+        const iterator = collection[Symbol.iterator]();
+        let next: IteratorResult<T, any>;
+        for (let i = 0; i < usableCount; i++) {
+            next = iterator.next();
+            if (next.done) break;
+        }
+
+        while (!(next = iterator.next()).done) yield next.value;
+    });
 }
 
 export function take<T>(

@@ -1,4 +1,5 @@
 import { ReadStream } from "fs";
+import { userInfo } from "os";
 import Stopwatch from "./javascriptStopwatch/stopwatch";
 import getStopwatchClass from "./javascriptStopwatch/stopwatch";
 import { and, or } from "./logic";
@@ -64,6 +65,8 @@ import {
     lazyCachedIterable,
     lastOrUndefined,
     lastOrDefault,
+    empty,
+    indexOf,
 } from "./utils";
 
 export interface StreamSourceProperties<T> {
@@ -685,6 +688,46 @@ export default class Stream<T> implements Iterable<T> {
         ) as any;
     }
 
+    /** Does the same thing as {@link Array.copyWithin} but it doesn't modify the original source. */
+    public copyWithin(
+        target: number | bigint,
+        start: number | bigint,
+        end: number | bigint | undefined
+    ) {
+        const usableTarget = Number(target);
+        const usableStart = Number(start);
+        const usableEnd = end === undefined ? undefined : Number(end);
+
+        return new Stream(
+            () => {
+                return this.toArray().copyWithin(
+                    usableTarget,
+                    usableStart,
+                    usableEnd
+                );
+            },
+            { oneOff: true, immutable: this.sourceProperties.immutable }
+        );
+    }
+
+    /**
+     * Normally Streams are recalculated every iteration in order to stay consistent with the Stream's source. This method records the result of the stream and returns a new Stream of that recording. The returned Stream no longer follows changes to the original source and iterating the new Stream doesn't iterate the original Stream.
+     *
+     * The copy of the Stream is made at call time. For lazy execution use {@link lazySolidify}.
+     */
+    public solidify(): Stream<T> {
+        const solid = this.asSolid();
+        return new Stream(() => solid, { immutable: true });
+    }
+
+    /** Lazy version of {@link solidify}. The Stream is copied on the first iteration of the result and cached for later iterations. */
+    public lazySolidify(): Stream<T> {
+        return new Stream(
+            lazy(() => this.asSolid()),
+            { immutable: true }
+        );
+    }
+
     /**
      * Copies the Stream into an Array. The Array is safe to modify.
      *
@@ -860,24 +903,6 @@ export default class Stream<T> implements Iterable<T> {
     }
 
     /**
-     * Normally Streams are recalculated every iteration in order to stay consistent with the Stream's source. This method records the result of the stream and returns a new Stream of that recording. The returned Stream no longer follows changes to the original source and iterating the new Stream doesn't iterate the original Stream.
-     *
-     * The copy of the Stream is made at call time. For lazy execution use {@link lazySolidify}.
-     */
-    public solidify(): Stream<T> {
-        const solid = this.asSolid();
-        return new Stream(() => solid, { immutable: true });
-    }
-
-    /** Lazy version of {@link solidify}. The Stream is copied on the first iteration of the result and cached for later iterations. */
-    public lazySolidify(): Stream<T> {
-        return new Stream(
-            lazy(() => this.asSolid()),
-            { immutable: true }
-        );
-    }
-
-    /**
      * Performs a reduction of the values in the Stream. Like {@link Array.reduce}.
      * @throws If The Stream is empty.
      */
@@ -999,9 +1024,35 @@ export default class Stream<T> implements Iterable<T> {
         return undefined;
     }
 
+    /** @returns The index of the last value to pass the test or undefined if one wasn't found. */
+    public findLastIndex(
+        test: (value: T, index: number) => boolean
+    ): number | undefined {
+        let index = 0;
+        let result: number | undefined = undefined;
+        for (const value of this) {
+            if (test(value, index)) result = index;
+            index++;
+        }
+        return result;
+    }
+
     /** @returns The first index of the given value or undefined if the value isn't found. */
-    public indexOf(value: T): number | undefined {
-        return this.findIndex(streamValue => Object.is(value, streamValue));
+    public indexOf(value: T, fromIndex?: number | bigint): number | undefined {
+        return indexOf(this.getBaseSource(), value, fromIndex);
+    }
+
+    /** @returns The last index of the given value or undefined if the value isn't found. */
+    public lastIndexOf(
+        value: T,
+        fromIndex?: number | bigint
+    ): number | undefined {
+        const lastIndex = this.toArray().lastIndexOf(
+            value,
+            fromIndex === undefined ? undefined : Number(fromIndex)
+        );
+        if (lastIndex === -1) return undefined;
+        return lastIndex;
     }
 
     /** @returns The first value in the Stream or undefined if the Stream is empty. */
