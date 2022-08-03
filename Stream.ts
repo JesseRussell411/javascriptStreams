@@ -99,8 +99,8 @@ export default class Stream<T> implements Iterable<T> {
         return new Stream(() => values, { immutable: true });
     }
 
-    public static of<T>(source: Iterable<T>) {
-        return new Stream(() => source, {});
+    public static of<T>(source: Iterable<T> | undefined) {
+        return new Stream(eager(source ?? []), {});
     }
 
     /** @returns A Stream of the collection from the given function. */
