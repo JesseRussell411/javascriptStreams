@@ -183,8 +183,8 @@ export function asSolid<T>(collection: Iterable<T>): ReadonlySolid<T> {
 }
 
 export function includes<T>(collection: Iterable<T>, value: T) {
-    if (isArray(collection)) return collection.includes(value);
     if (isSet(collection)) return collection.has(value);
+    if (isArray(collection)) return collection.includes(value);
     for (const collectionValue of collection)
         if (Object.is(value, collectionValue)) return true;
     return false;

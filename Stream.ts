@@ -964,7 +964,7 @@ export default class Stream<T> implements Iterable<T> {
      * Adds all the values in the Stream into a string, separated by the specified separator string. Like {@link Array.join}.
      * @param separator Put in between the values in the resulting string. Defaults to a comma (,).
      */
-    public join(separator?: string): string {
+    public join(separator: string = ","): string {
         return join(this.getBaseSource(), separator);
     }
 
