@@ -277,7 +277,7 @@ export default class Stream<T> implements Iterable<T> {
     /**
      * An out-of-place sort of the values in the Stream based on the given comparator. Like {@link Array.sort}.
      * @returns A Stream of the original Streams values sorted by the comparator.
-     * @params comparator How to sort the values. If ommited, the values are sorted in ascending, ASCII order.
+     * @params comparator How to sort the values. If omitted, the values are sorted in ascending, ASCII order.
      */
     public sort(comparator?: (a: T, b: T) => number): Stream<T> {
         return Stream.from(() => {
@@ -398,7 +398,7 @@ export default class Stream<T> implements Iterable<T> {
     /**
      * Takes a specified number of values from the Stream, spread out from the start to the end.
      * @param count How many values to take from the Stream.
-     * @returns A Stream of values spread out accross the original Stream.
+     * @returns A Stream of values spread out across the original Stream.
      */
     public takeSparse(count: number | bigint) {
         return new Stream(
@@ -410,7 +410,7 @@ export default class Stream<T> implements Iterable<T> {
     /**
      * Skips a specified number of values in the Stream, spread out from the start to the end.
      * @param count How many values to skip.
-     * @returns A Stream of values spread out accross the original Stream.
+     * @returns A Stream of values spread out across the original Stream.
      */
     public skipSparse(count: number | bigint) {
         return new Stream(
@@ -552,7 +552,7 @@ export default class Stream<T> implements Iterable<T> {
     /**
      * Removes a number of values from the Stream. Similar to {@link Array.splice}.
      * @param start Where to start the removal.
-     * @param deleteCount How many values to remvoe.
+     * @param deleteCount How many values to remove.
      */
     public remove(start: number | bigint, deleteCount: number | bigint = 1) {
         const useableStart = BigInt(start);
@@ -600,7 +600,7 @@ export default class Stream<T> implements Iterable<T> {
         );
     }
 
-    /** @returns A Stream over the orignal Stream in random order. */
+    /** @returns A Stream over the original Stream in random order. */
     public shuffle(): Stream<T> {
         return new Stream(
             () => {
@@ -1097,7 +1097,7 @@ export default class Stream<T> implements Iterable<T> {
      */
     public first(): T {
         for (const value of this) return value;
-        throw new Error("Stream has no first value because it it emtpy");
+        throw new Error("Stream has no first value because it it empty");
     }
 
     /**
@@ -1242,13 +1242,13 @@ export default class Stream<T> implements Iterable<T> {
 
     /**
      * Iterates over the Stream, recording how long it takes.
-     * @retuns How long in milliseconds it took for the Stream to be Iterated.
+     * @returns How long in milliseconds it took for the Stream to be Iterated.
      */
     public benchmark(): number;
 
     /**
      * Iterates over the Stream, recording how long it takes.
-     * @retuns A Stream over the original Stream's result. Note that subsequent calls to {@link benchmark} will include the time taken to iterate a copy of the original Stream's result isntead of the original Stream effectively timing the method calls between calls to {@link benchmark}.
+     * @returns A Stream over the original Stream's result. Note that subsequent calls to {@link benchmark} will include the time taken to iterate a copy of the original Stream's result instead of the original Stream effectively timing the method calls between calls to {@link benchmark}.
      */
     public benchmark(takeTime: (timeInMilliseconds: number) => void): Stream<T>;
 

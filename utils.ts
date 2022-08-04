@@ -14,7 +14,7 @@ export function eager<T>(result: T): () => T {
  * Creates a cached version of the given function.
  * @returns The cached version of the function. The original function is called once on the first call of the returned function and the result is cached. Subsequent calls return the cached result of the first call without calling the original function.
  *
- * Note that this function consideres both returns and throws as output. If the original function throws an error, the error will be cached, thrown, and thrown again on all subsequent calls without calling the original function.
+ * Note that this function considers both returns and throws as output. If the original function throws an error, the error will be cached, thrown, and thrown again on all subsequent calls without calling the original function.
  */
 export function lazy<T>(getter: () => T): () => T {
     let resultGetter = () => {
@@ -61,7 +61,7 @@ const emptyIterable = iter(function* () {
     return;
 });
 
-/** @returns An emtpy Iterable. */
+/** @returns An empty Iterable. */
 export function empty<T>(): Iterable<T> {
     return emptyIterable;
 }
@@ -238,18 +238,18 @@ export function setAndGet<K, MV, V extends MV>(
  * @throws If the Stream is empty.
  */
 export function last<T>(collection: Iterable<T>): T {
-    function throwEmtpyError() {
+    function throwEmptyError() {
         throw new Error("collection has no last value because it is empty");
     }
     if (isArray(collection)) {
         if (collection.length > 0) return collection[collection.length - 1]!;
-        else throwEmtpyError();
+        else throwEmptyError();
     }
 
     const iter = collection[Symbol.iterator]();
     let next = iter.next();
 
-    if (next.done) throwEmtpyError();
+    if (next.done) throwEmptyError();
 
     let last: T = next.value;
     while (!(next = iter.next()).done) last = next.value;
@@ -1104,7 +1104,7 @@ export function skipSparse<T>(collection: Iterable<T>, count: number | bigint) {
 /**
  * Takes a specified number of values from the collection, spread out from the start to the end.
  * @param count How many values to take.
- * @returns An Iterable over the values spread out accross the collection.
+ * @returns An Iterable over the values spread out across the collection.
  */
 export function takeSparse<T>(
     collection: Iterable<T>,
