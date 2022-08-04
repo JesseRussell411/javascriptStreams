@@ -237,7 +237,7 @@ export function setAndGet<K, MV, V extends MV>(
  * @returns The last value in the given Iterable.
  * @throws If the Stream is empty.
  */
-export function last<T>(collection: Iterable<T>) {
+export function last<T>(collection: Iterable<T>): T {
     function throwEmtpyError() {
         throw new Error("collection has no last value because it is empty");
     }

@@ -1012,6 +1012,20 @@ export default class Stream<T> implements Iterable<T> {
         return undefined;
     }
 
+    /**
+     * @returns The first value to pass the test or the default value if one wasn't found.
+     * @param test
+     * @param getDefault Returns the default values.
+     */
+    public findOrDefault<D>(
+        test: (value: T, index: number) => boolean,
+        getDefault: () => D
+    ): T | D {
+        let index = 0;
+        for (const value of this) if (test(value, index++)) return value;
+        return getDefault();
+    }
+
     /** @returns The index of the first value to pass the test or undefined if one wasn't found. */
     public findIndex(
         test: (value: T, index: number) => boolean
