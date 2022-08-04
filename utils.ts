@@ -242,7 +242,7 @@ export function last<T>(collection: Iterable<T>): T {
         throw new Error("collection has no last value because it is empty");
     }
     if (isArray(collection)) {
-        if (collection.length > 0) return collection[collection.length - 1];
+        if (collection.length > 0) return collection[collection.length - 1]!;
         else throwEmtpyError();
     }
 
@@ -271,7 +271,7 @@ export function lastOrDefault<T, D>(
     getDefault: () => D
 ): T | D {
     if (isArray(collection)) {
-        if (collection.length > 0) return collection[collection.length - 1];
+        if (collection.length > 0) return collection[collection.length - 1]!;
         else return getDefault();
     }
 
@@ -311,7 +311,7 @@ export function at<T>(
 export function reverse<T>(collection: Iterable<T>): Iterable<T> {
     return iter(function* () {
         const array = asArray(collection);
-        for (let i = array.length - 1; i >= 0; i--) yield array[i];
+        for (let i = array.length - 1; i >= 0; i--) yield array[i]!;
     });
 }
 
@@ -680,8 +680,8 @@ export function shuffle<T>(array: T[]): void {
     for (let i = array.length - 1; i > 0; i--) {
         const j = Math.trunc(Math.random() * (i + 1));
 
-        const temp = array[i];
-        array[i] = array[j];
+        const temp = array[i]!;
+        array[i] = array[j]!;
         array[j] = temp;
     }
 }
@@ -1000,7 +1000,7 @@ export class Random {
         const size = getNonIteratedCount(options);
         if (size === 0) throw new Error("no options to choose from");
         if (Array.isArray(options)) {
-            return options.splice(this.int(0, size), 1)[0];
+            return options.splice(this.int(0, size), 1)[0]!;
         } else if (options instanceof Set) {
             const result = at(options, this.int(0, size))!;
             options.delete(result);
@@ -1056,7 +1056,7 @@ export function alternating<T>(
             const numberInterval = Number(usableInterval);
 
             for (let i = 0; i < resultSize; i++)
-                yield collection[i * numberInterval];
+                yield collection[i * numberInterval]!;
         });
     } else {
         return iter(function* () {

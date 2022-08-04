@@ -321,7 +321,7 @@ export default class Stream<T> implements Iterable<T> {
             () =>
                 iter(function* () {
                     const array = self.asArray();
-                    for (let i = array.length - 1; i >= 0; i--) yield array[i];
+                    for (let i = array.length - 1; i >= 0; i--) yield array[i] as T;
                 }),
             { immutable: this.sourceProperties.immutable }
         );
