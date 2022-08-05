@@ -51,9 +51,9 @@ import {
     Solid,
     isSolid,
     asSolid,
-    alternating as alternating,
+    alternating as takeAlternating,
     getNonIteratedCount,
-    alternatingSkip as removeAlternating,
+    alternatingSkip as skipAlternating,
     eager,
     distinct,
     map,
@@ -69,20 +69,27 @@ import {
     indexOf,
 } from "./utils";
 
+/** Properties of a Stream's source. */
 export interface StreamSourceProperties<T> {
+    /** Whether the Iterable from {@link Stream.getSource} is a new instance every time that can be modified safely. */
     oneOff?: boolean;
+    /** Whether the values in the Iterable from {@link Stream.getSource} will never change. Note that this doesn't mean the values themselves can't be mutable (like if the values are object, they can have mutable fields), it just means that the values can't be swapped out with other values, can't be re-arranged, or removed and values cannot be added into the source. Essentially, the source can't change but the values in the source can. */
     immutable?: boolean;
 }
 
 export default class Stream<T> implements Iterable<T> {
+    /** Returns the Source Iterable that the Stream is over. */
     protected readonly getSource: () => Iterable<T>;
+    /** Properties of the Source. */
     protected readonly sourceProperties: StreamSourceProperties<T>;
 
+    /** For the case of a Stream of a Stream of a Stream... etc. Gets the non-Stream source at the bottom. */
     protected static getBaseSourceOf<T>(source: Iterable<T>) {
         while (source instanceof Stream) source = source.getSource();
         return source;
     }
 
+    /** For the case of a Stream of a Stream of a Stream... etc. Gets the non-Stream source at the bottom. */
     protected getBaseSource() {
         return Stream.getBaseSourceOf(this.getSource());
     }
@@ -95,13 +102,17 @@ export default class Stream<T> implements Iterable<T> {
         this.getSource = getSource;
     }
 
+    /** @returns An empty Stream of the given type. */
     public static empty<T>(): Stream<T> {
         return new Stream<T>(() => [], { oneOff: true, immutable: true });
     }
+
+    /** @return A Stream of the given values. */
     public static literal<T>(...values: T[]) {
         return new Stream(() => values, { immutable: true });
     }
 
+    /** @returns A Stream of the given collection or an empty Stream if undefined is given. */
     public static of<T>(source: Iterable<T> | undefined) {
         return new Stream(eager(source ?? []), {});
     }
@@ -116,23 +127,53 @@ export default class Stream<T> implements Iterable<T> {
         return new Stream(eager(iter(generatorGetter)), {});
     }
 
+    /**
+     * Creates a new Stream of {@link BigInt}s from the start (inclusive) to the end (exclusive) on the given step size.
+     * @param start The number to start on (inclusive)
+     * @param end The number to end on (exclusive, stops before this number)
+     * @param step The interval size.
+     */
     public static range(
         start: bigint,
         end: bigint,
         step: bigint
     ): Stream<bigint>;
+    /**
+     * Creates a new Stream of {@link BigInt}s from the start (inclusive) to the end (exclusive) on the interval size of 1.
+     * @param start The number to start on (inclusive)
+     * @param end The number to end on (exclusive, stops before this number)
+     */
     public static range(start: bigint, end: bigint): Stream<bigint>;
+    /**
+     * Creates a new Stream of {@link BigInt}s from the 1 (inclusive) to the end (exclusive) on the interval size of 1.
+     * @param end The number to end on (exclusive, stops before this number)
+     */
     public static range(end: bigint): Stream<bigint>;
 
+    /**
+     * Creates a new Stream of {@link Number}s from the start (inclusive) to the end (exclusive) on the interval size of 1.
+     * @param start The number to start on (inclusive)
+     * @param end The number to end on (exclusive, stops before this number)
+     */
     public static range(
         start: number | bigint,
         end: number | bigint,
         step: number | bigint
     ): Stream<number>;
+
+    /**
+     * Creates a new Stream of {@link Number}s from the start (inclusive) to the end (exclusive) on the interval size of 1.
+     * @param start The number to start on (inclusive)
+     * @param end The number to end on (exclusive, stops before this number)
+     */
     public static range(
         start: number | bigint,
         end: number | bigint
     ): Stream<number>;
+    /**
+     * Creates a new Stream of {@link Number}s from the 1 (inclusive) to the end (exclusive) on the interval size of 1.
+     * @param end The number to end on (exclusive, stops before this number)
+     */
     public static range(end: number | bigint): Stream<number>;
 
     public static range(_startOrEnd: any, _end?: any, _step?: any): any {
@@ -141,7 +182,11 @@ export default class Stream<T> implements Iterable<T> {
         });
     }
 
-    public static generate<T>(from: () => T, length: number | bigint) {
+    /** Generate a new Stream from the given generator function. */
+    public static generate<T>(
+        from: (index: number) => T,
+        length: number | bigint
+    ) {
         return Stream.of(generate(from, length));
     }
 
@@ -203,6 +248,10 @@ export default class Stream<T> implements Iterable<T> {
         );
     }
 
+    /**
+     * Repeats the Stream the given number of times.
+     * @param times How many times to repeat the Stream. If negative, the stream is reversed and then repeated.
+     */
     public repeat(times: number | bigint): Stream<T> {
         const usableTimes = BigInt(times);
         if (usableTimes < 0n) return this.reverse().repeat(-usableTimes);
@@ -237,6 +286,12 @@ export default class Stream<T> implements Iterable<T> {
     public groupBy<K>(
         keySelector: (value: T, index: number) => K
     ): Stream<[K, StreamableArray<T>]>;
+    /**
+     * Groups the values in the Stream by the given key selector and then applying a mapping to the values using the value selector.
+     * @param keySelector Specifies group to put each value in by the key it returns.
+     * @param valueSelector The mapping to apply to the values after the grouping.
+     * @returns A Stream over the groups. Each value is an Array where the first item is the group's key and the second item is the groups values.
+     */
     public groupBy<K, V>(
         keySelector: (value: T, index: number) => K,
         valueSelector: (value: T, index: number) => V
@@ -253,6 +308,7 @@ export default class Stream<T> implements Iterable<T> {
         );
     }
 
+    // TODO write documentation for this.
     public groupJoin<I, K, R>(
         inner: Iterable<I>,
         keySelector: (value: T) => K,
@@ -287,7 +343,13 @@ export default class Stream<T> implements Iterable<T> {
         });
     }
 
+    /**
+     * Sorts the Stream from least to greatest using the given comparator function.
+     */
     public orderBy(comparator: Comparator<T>): OrderedStream<T>;
+    /**
+     * Sorts the Stream from least to greatest based on the key from the given key selector function.
+     */
     public orderBy(parameter: (value: T) => any): OrderedStream<T>;
     public orderBy(order: Order<T>): OrderedStream<T> {
         return new OrderedStream(
@@ -297,16 +359,28 @@ export default class Stream<T> implements Iterable<T> {
         );
     }
 
+    /**
+     * Sorts the Stream from greatest to least using the given comparator function.
+     */
     public orderByDescending(comparator: Comparator<T>): OrderedStream<T>;
-    public orderByDescending(parameter: (value: T) => any): OrderedStream<T>;
+    /**
+     * Sorts the Stream from greatest to least based on the key from the given key selector function.
+     */
+    public orderByDescending(keySelector: (value: T) => any): OrderedStream<T>;
     public orderByDescending(order: Order<T>): OrderedStream<T> {
         return this.orderBy(reverseOrder(order));
     }
 
+    /**
+     * Sorts the Stream from least to greatest.
+     */
     public order(): OrderedStream<T> {
         return this.orderBy(value => value);
     }
 
+    /**
+     * Sorts the Stream from greatest to least.
+     */
     public orderDescending(): OrderedStream<T> {
         return this.orderByDescending(value => value);
     }
@@ -321,22 +395,31 @@ export default class Stream<T> implements Iterable<T> {
             () =>
                 iter(function* () {
                     const array = self.asArray();
-                    for (let i = array.length - 1; i >= 0; i--) yield array[i] as T;
+                    for (let i = array.length - 1; i >= 0; i--)
+                        yield array[i] as T;
                 }),
             { immutable: this.sourceProperties.immutable }
         );
     }
 
-    public alternating(interval: number | bigint = 2n): Stream<T> {
+    /**
+     * Takes every n value in the Stream.
+     * @param interval The interval on which to take. Defaults to 2.
+     */
+    public takeAlternating(interval: number | bigint = 2n): Stream<T> {
         return new Stream(
-            eager(alternating(this.getBaseSource(), interval)),
+            eager(takeAlternating(this.getBaseSource(), interval)),
             this.sourceProperties
         );
     }
 
-    public removeAlternating(interval: number | bigint = 2n): Stream<T> {
+    /**
+     * Skips every n value in the Stream.
+     * @param interval The interval on which to skip. Defaults to 2.
+     */
+    public skipAlternating(interval: number | bigint = 2n): Stream<T> {
         return new Stream(
-            eager(removeAlternating(this.getBaseSource(), interval)),
+            eager(skipAlternating(this.getBaseSource(), interval)),
             this.sourceProperties
         );
     }
@@ -381,6 +464,9 @@ export default class Stream<T> implements Iterable<T> {
         );
     }
 
+    /**
+     * Takes a number of values from the start of the Stream.
+     */
     public take(count: number | bigint): Stream<T> {
         const usableCount = Math.trunc(Number(count));
         if (usableCount < 0) return this.reverse().take(-count).reverse();
@@ -388,6 +474,9 @@ export default class Stream<T> implements Iterable<T> {
         return this.takeWhile((_, index) => index < usableCount);
     }
 
+    /**
+     * Skips a number of values from the start of the Stream.
+     */
     public skip(count: number | bigint): Stream<T> {
         const usableCount = Math.trunc(Number(count));
         if (usableCount < 0) return this.reverse().skip(-count).reverse();
@@ -419,6 +508,9 @@ export default class Stream<T> implements Iterable<T> {
         );
     }
 
+    /**
+     * Takes a number of random values from the Stream. The values to be taken are essentially taken without replacement. The same item is never taken twice.
+     */
     public takeRandom(count: number | bigint): Stream<T> {
         if (BigInt(count) < 0n || Number(count) < 0)
             throw new Error(
@@ -427,6 +519,9 @@ export default class Stream<T> implements Iterable<T> {
         return this.shuffle().take(count);
     }
 
+    /**
+     * Skips a number of random values in the Stream. The values to be skipped are essentially taken without replacement. The same item is never skipped twice.
+     */
     public skipRandom(count: number | bigint): Stream<T> {
         const usableCount = BigInt(count);
         if (usableCount < 0n)
@@ -446,6 +541,9 @@ export default class Stream<T> implements Iterable<T> {
         );
     }
 
+    /**
+     * Concatenates the Iterable to the end of the Stream. Similar to {@link Array.push} and {@link Array.concat}.
+     */
     public concat<O>(other: Iterable<O>): Stream<T | O> {
         const self = this;
         return new Stream(
@@ -463,7 +561,10 @@ export default class Stream<T> implements Iterable<T> {
         );
     }
 
-    public unShift<O>(other: Iterable<O>): Stream<T | O> {
+    /**
+     * Concatenates the Iterable to the start of the Stream. Similar to {@link Array.unshift}.
+     */
+    public unshift<O>(other: Iterable<O>): Stream<T | O> {
         const self = this;
         return new Stream(
             () =>
@@ -480,8 +581,14 @@ export default class Stream<T> implements Iterable<T> {
         );
     }
 
+    /**
+     * Inserts the Iterable at the given index.
+     * @param other What to insert.
+     * @param at Where to insert. Must be 0 or greater.
+     */
     public insert<O>(other: Iterable<O>, at: number | bigint): Stream<T | O> {
         const usableAt = BigInt(at);
+        // TODO add upper bound.
         if (usableAt < 0n)
             throw new Error(`at must be 0 or greater but ${at} was given`);
         const self = this;
@@ -510,9 +617,15 @@ export default class Stream<T> implements Iterable<T> {
         );
     }
 
+    /**
+     * Inserts the value into the Stream at the given index.
+     * @param value What to insert.
+     * @param at Where to insert. Must be 0 or greater.
+     */
     public insertValue(value: T, at: number | bigint) {
         const usableAt = BigInt(at);
 
+        //TODO add upper bound
         //TODO insert from end if at is negative
         if (usableAt < 0n)
             throw new Error(`at must be 0 or greater but ${at} was given`);
@@ -539,6 +652,9 @@ export default class Stream<T> implements Iterable<T> {
         );
     }
 
+    /**
+     * Removes duplicated values from the Stream.
+     */
     public distinct(identifier?: (value: T) => any): Stream<T> {
         const self = this;
         return new Stream(eager(distinct(this.getBaseSource(), identifier)), {
@@ -612,12 +728,18 @@ export default class Stream<T> implements Iterable<T> {
         );
     }
 
+    /**
+     * Appends the value to the end of the Stream.
+     */
     public append(value: T) {
         return new Stream(eager(append(this.getBaseSource(), value)), {
             immutable: this.sourceProperties.immutable,
         });
     }
 
+    /**
+     * Appends the value to the start of the Stream.
+     */
     public prepend(value: T) {
         return new Stream(eager(append(this.getBaseSource(), value)), {
             immutable: this.sourceProperties.immutable,
@@ -625,7 +747,7 @@ export default class Stream<T> implements Iterable<T> {
     }
 
     /**
-     * Appends the values from the given Iterable to the end of the Stream if they aren't already in the Stream.
+     * Appends the values from the given Iterable to the end of the Stream if they aren't already in the Stream. Essentially performing a union operation between the Stream and the given Iterable.
      * @param needed
      * @returns
      */
@@ -639,7 +761,7 @@ export default class Stream<T> implements Iterable<T> {
     }
 
     /**
-     * Removes all the values found in the given Iterable from the Stream.
+     * Removes all the values found in the given Iterable from the Stream. Essentially performing a difference operation between the Stream and the given Iterable.
      * @param remove What not to include in the returned stream.
      * @returns A Stream of all the values in the original Stream that are not found in the given Iterable.
      */
@@ -716,14 +838,13 @@ export default class Stream<T> implements Iterable<T> {
      * The copy of the Stream is made at call time. For lazy execution use {@link lazySolidify}.
      */
     public solidify(): Stream<T> {
-        const solid = this.asSolid();
-        return new Stream(() => solid, { immutable: true });
+        return new Stream(eager(this.toSolid()), { immutable: true });
     }
 
-    /** Lazy version of {@link solidify}. The Stream is copied on the first iteration of the result and cached for later iterations. */
+    /** Lazy version of {@link solidify}. The Stream is copied on the first iteration of the result which is cached for later iterations. */
     public lazySolidify(): Stream<T> {
         return new Stream(
-            lazy(() => this.asSolid()),
+            lazy(() => this.toSolid()),
             { immutable: true }
         );
     }
@@ -769,15 +890,35 @@ export default class Stream<T> implements Iterable<T> {
         ? Map<unknown, V>
         : Map<unknown, unknown>;
 
+    /**
+     * Copies the Stream into a Map. The Map is safe to modify.
+     *
+     * If the Map does not need to be modifiable, consider using {@link Stream.asMap} instead.
+     * @param keySelector Selects the map's keys from the values in the Stream.
+     */
     public toMap<K>(
         keySelector: (value: T, index: number) => K
     ): T extends EntryLikeValue<infer V> ? ReadonlyMap<K, V> : never;
 
+    /**
+     * Copies the Stream into a Map. The Map is safe to modify.
+     *
+     * If the Map does not need to be modifiable, consider using {@link Stream.asMap} instead.
+     * @param keySelector
+     * @param valueSelector Selects the map's values from the values in the Stream.
+     */
     public toMap<V>(
         keySelector: undefined,
         valueSelector: (value: T, index: number) => V
     ): T extends EntryLikeKey<infer K> ? ReadonlyMap<K, V> : never;
 
+    /**
+     * Copies the Stream into a Map. The Map is safe to modify.
+     *
+     * If the Map does not need to be modifiable, consider using {@link Stream.asMap} instead.
+     * @param keySelector Selects the map's keys from the values in the Stream.
+     * @param valueSelector Selects the map's values from the values in the Stream.
+     */
     public toMap<K, V>(
         keySelector: (value: T, index: number) => K,
         valueSelector: (value: T, index: number) => V
@@ -855,7 +996,9 @@ export default class Stream<T> implements Iterable<T> {
     }
 
     /**
-     * Provides a readonly Map of the contents of the Stream. If the Map needs to be modifiable consider using {@link Stream.toMap} instead.
+     * Provides a readonly Map of the contents of the Stream.
+     *
+     * If the Map needs to be modifiable consider using {@link Stream.toMap} instead.
      */
     public asMap(): T extends EntryLike<infer K, infer V>
         ? ReadonlyMap<K, V>
@@ -865,15 +1008,33 @@ export default class Stream<T> implements Iterable<T> {
         ? ReadonlyMap<unknown, V>
         : ReadonlyMap<unknown, unknown>;
 
+    /**
+     * Provides a readonly Map of the contents of the Stream.
+     *
+     * If the Map needs to be modifiable consider using {@link Stream.toMap} instead.
+     * @param keySelector Selects the map's keys from the values in the Stream.
+     */
     public asMap<K>(
         keySelector: (value: T, index: number) => K
     ): T extends EntryLikeValue<infer V> ? ReadonlyMap<K, V> : never;
 
+    /**
+     * Provides a readonly Map of the contents of the Stream.
+     *
+     * If the Map needs to be modifiable consider using {@link Stream.toMap} instead.
+     * @param keySelector
+     * @param valueSelector Selects the map's values from the values in the Stream.
+     */
     public asMap<V>(
         keySelector: undefined,
         valueSelector: (value: T, index: number) => V
     ): T extends EntryLikeKey<infer K> ? ReadonlyMap<K, V> : never;
 
+    /**
+     * Provides a readonly Map of the contents of the Stream. If the Map needs to be modifiable consider using {@link Stream.toMap} instead.
+     * @param keySelector Selects the map's keys from the values in the Stream.
+     * @param valueSelector Selects the map's values from the values in the Stream.
+     */
     public asMap<K, V>(
         keySelector: (value: T, index: number) => K,
         valueSelector: (value: T, index: number) => V
@@ -1205,6 +1366,11 @@ export default class Stream<T> implements Iterable<T> {
         return next(this);
     }
 
+    /**
+     * @returns Whether the Stream and the given Iterable are the same length and contain the same values in the same order.
+     * @param other The other Iterable to check the Stream against.
+     * @param checkEquality Test for whether two values are equal. Defaults to {@link Object.is}.
+     */
     public sequenceEqual(
         other: Iterable<T>,
         checkEquality: (a: T, b: T) => boolean = (a, b) => Object.is(a, b)
@@ -1348,7 +1514,7 @@ export class OrderedStream<T> extends Stream<T> {
             this.originalGetSource,
             this.orderedBy,
             {},
-            eager(this.asArray())
+            eager(this.toArray())
         );
     }
 
@@ -1357,7 +1523,7 @@ export class OrderedStream<T> extends Stream<T> {
             this.originalGetSource,
             this.orderedBy,
             {},
-            lazy(() => this.asArray())
+            lazy(() => this.toArray())
         );
     }
 }
@@ -1576,7 +1742,7 @@ export class TypeFilteredStream<
     }
 
     /**
-     * Adds another type constraint.
+     * Adds another type to filter the Stream to.
      */
     public and<Option extends TypeFilterOption>(
         option: Option extends Options ? never : Option
@@ -1628,7 +1794,7 @@ export class TypeFilteredOutStream<
     }
 
     /**
-     * Adds another type constraint.
+     * Adds another type to filter out of the Stream.
      */
     public and<Option extends TypeFilterOption>(
         option: Option extends Options ? never : Option

@@ -880,6 +880,8 @@ export function distinct<T>(
     collection: Iterable<T>,
     identifier: (value: T) => unknown = value => value
 ): Iterable<T> {
+    if (isSet(collection)) return collection;
+    
     return iter(function* () {
         const returned = new Set<unknown>();
 
