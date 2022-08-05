@@ -1414,6 +1414,7 @@ export default class Stream<T> implements Iterable<T> {
 
     /**
      * Iterates over the Stream, recording how long it takes.
+     * @param takeTime Called with the time taken (in milliseconds).
      * @returns A Stream over the original Stream's result. Note that subsequent calls to {@link benchmark} will include the time taken to iterate a copy of the original Stream's result instead of the original Stream effectively timing the method calls between calls to {@link benchmark}.
      */
     public benchmark(takeTime: (timeInMilliseconds: number) => void): Stream<T>;
