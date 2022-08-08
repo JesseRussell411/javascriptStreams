@@ -142,6 +142,10 @@ async function main() {
         .and("undefined")
         .skip(0);
 
+    const stm = Stream.of([1,2,3,4,5] as const);
+    console.log(stm.concat([["a", "b"], ";alksjdf", ["q", "z"]] as const).asArray())
+    console.log(stm.concat([["a", "b"], ";alksjdf", ["q", "z"]] as const).asArray())
+
     // console.log(nandb.asArray());
 
     // console.log(inspect(customers.groupJoin(customers, c => c.first_name, oc => oc.first_name, ())))

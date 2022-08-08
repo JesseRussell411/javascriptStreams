@@ -269,8 +269,7 @@ export default class Stream<T> implements Iterable<T> {
                             yield value;
                         }
                         i++;
-                        for (; i < usableTimes; i++)
-                            for (const value of cache) yield value;
+                        for (; i < usableTimes; i++) yield* cache;
                     }
                 })
             ),
@@ -457,7 +456,7 @@ export default class Stream<T> implements Iterable<T> {
                             break;
                         }
 
-                    for (const value of self) yield value;
+                    yield* self;
                 })
             ),
             { immutable: this.sourceProperties.immutable }
@@ -549,8 +548,8 @@ export default class Stream<T> implements Iterable<T> {
         return new Stream(
             () =>
                 iter(function* () {
-                    for (const value of self) yield value;
-                    for (const value of other) yield value;
+                    yield* self;
+                    yield* other;
                 }),
             {
                 immutable:
@@ -569,8 +568,8 @@ export default class Stream<T> implements Iterable<T> {
         return new Stream(
             () =>
                 iter(function* () {
-                    for (const value of other) yield value;
-                    for (const value of self) yield value;
+                    yield* other;
+                    yield* self;
                 }),
             {
                 immutable:
@@ -604,7 +603,8 @@ export default class Stream<T> implements Iterable<T> {
                         i++
                     )
                         yield next.value;
-                    for (const value of other) yield value;
+
+                    yield* other;
                     while (!(next = iter.next()).done) yield next.value;
                 })
             ),
@@ -1160,7 +1160,7 @@ export default class Stream<T> implements Iterable<T> {
         return Stream.iter(function* () {
             for (const value of self) {
                 if (isIterable(value))
-                    for (const subValue of value) yield subValue;
+                    yield* value;
                 else yield value;
             }
         }) as any;

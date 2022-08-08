@@ -40,7 +40,7 @@ export function lazyCachedIterable<T>(iterable: Iterable<T>) {
     const iterator = iterable[Symbol.iterator]();
 
     return iter(function* () {
-        for (const value of cache) yield value;
+        yield* cache;
 
         let next;
         while (!(next = iterator.next()).done) {
@@ -92,8 +92,8 @@ export function filter<T>(
 
 export function concat<A, B>(a: Iterable<A>, b: Iterable<B>): Iterable<A | B> {
     return iter(function* () {
-        for (const value of a) yield value;
-        for (const value of b) yield value;
+        yield* a;
+        yield* b;
     });
 }
 
@@ -663,7 +663,7 @@ export function toMap<T, K, V>(
 
 export function append<T>(collection: Iterable<T>, value: T): Iterable<T> {
     return iter(function* () {
-        for (const value of collection) yield value;
+        yield* collection;
         yield value;
     });
 }
@@ -671,7 +671,7 @@ export function append<T>(collection: Iterable<T>, value: T): Iterable<T> {
 export function prepend<T>(collection: Iterable<T>, value: T): Iterable<T> {
     return iter(function* () {
         yield value;
-        for (const value of collection) yield value;
+        yield* collection;
     });
 }
 
@@ -776,7 +776,7 @@ export function including<T>(
             yield value;
         }
 
-        for (const value of remaining) yield value;
+        yield* remaining;
     });
 }
 
