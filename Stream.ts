@@ -1494,6 +1494,8 @@ export class OrderedStream<T> extends Stream<T> {
         this.orderedBy = orderedBy;
     }
 
+    //TODO: document all this
+
     public thenBy(comparator: Comparator<T>): OrderedStream<T>;
     public thenBy(keySelector: (value: T) => any): OrderedStream<T>;
     public thenBy(order: Order<T>): OrderedStream<T> {
