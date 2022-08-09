@@ -1,5 +1,5 @@
 import Stream from "./Stream";
-import { and } from "./logic";
+import { and, or } from "./logic";
 import { StreamableArray } from "./Streamable";
 import { toASCII } from "punycode";
 
@@ -119,7 +119,7 @@ export function partialCopy<T>(o: T, toCopy: (keyof T)[]): any {
     return result;
 }
 
-export function isIterable<T>(value: any): value is Iterable<unknown> {
+export function isIterable(value: any): value is Iterable<unknown> {
     return typeof value?.[Symbol.iterator] === "function";
 }
 
@@ -537,7 +537,18 @@ export function multiCompare<T>(a: T, b: T, orders: Iterable<Order<T>>) {
     return 0;
 }
 
-export function merge<A, B>(a: Iterable<A>, b: Iterable<B>): Iterable<A | B> {
+export function flat<SubT>(collection: Iterable<Iterable<SubT>>): Iterable<SubT> {
+    return iter(function* (){
+        for(const value of collection) {
+            yield* value;
+        }
+    });
+}
+
+export function zipperMerge<A, B>(
+    a: Iterable<A>,
+    b: Iterable<B>
+): Iterable<A | B> {
     return iter(function* () {
         const iterA = a[Symbol.iterator]();
         const iterB = b[Symbol.iterator]();
@@ -557,6 +568,69 @@ export function merge<A, B>(a: Iterable<A>, b: Iterable<B>): Iterable<A | B> {
             do {
                 yield nextB.value as B;
             } while (!(nextB = iterB.next()).done);
+        }
+    });
+}
+
+export function equalZipperMerge<A, B>(
+    a: Iterable<A>,
+    b: Iterable<B>
+): Iterable<A | B> {
+    return flat(equalMerge(a, b));
+}
+
+export function merge<A, B>(
+    a: Iterable<A>,
+    b: Iterable<B>
+): [A | undefined, B | undefined];
+
+export function merge<A, B, R>(
+    a: Iterable<A>,
+    b: Iterable<B>,
+    merger: (a: A | undefined, b: B | undefined) => R
+): Iterable<R>;
+
+export function merge<A, B>(
+    a: Iterable<A>,
+    b: Iterable<B>,
+    merger: (a: A | undefined, b: B | undefined) => any = (a, b) => [a, b]
+): any {
+    return iter(function* () {
+        const iterA = a[Symbol.iterator]();
+        const iterB = b[Symbol.iterator]();
+        let nextA: IteratorResult<A>;
+        let nextB: IteratorResult<B>;
+
+        while (or(!(nextA = iterA.next()).done, !(nextB = iterB.next()).done)) {
+            yield merger(nextA.value, nextB.value);
+        }
+    });
+}
+
+export function equalMerge<A, B>(
+    a: Iterable<A>,
+    b: Iterable<B>
+): Iterable<[A, B]>;
+
+export function equalMerge<A, B, R>(
+    a: Iterable<A>,
+    b: Iterable<B>,
+    merger: (a: A, b: B) => R
+): Iterable<R>;
+
+export function equalMerge<A, B>(
+    a: Iterable<A>,
+    b: Iterable<B>,
+    merger: (a: A, b: B) => any = (a, b) => [a, b]
+): any {
+    return iter(function* () {
+        const iterA = a[Symbol.iterator]();
+        const iterB = b[Symbol.iterator]();
+        let nextA: IteratorResult<A>;
+        let nextB: IteratorResult<B>;
+
+        while (and(!(nextA = iterA.next()).done, !(nextB = iterB.next()).done)) {
+            yield merger(nextA.value, nextB.value);
         }
     });
 }
@@ -881,7 +955,7 @@ export function distinct<T>(
     identifier: (value: T) => unknown = value => value
 ): Iterable<T> {
     if (isSet(collection)) return collection;
-    
+
     return iter(function* () {
         const returned = new Set<unknown>();
 

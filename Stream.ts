@@ -20,7 +20,8 @@ import {
     at,
     count,
     smartCompare,
-    merge,
+    zipperMerge,
+    equalZipperMerge,
     DeLiteral as DeLiteral,
     SmartCompareOptions,
     EntryLike,
@@ -67,6 +68,8 @@ import {
     lastOrDefault,
     empty,
     indexOf,
+    merge as looseMerge,
+    equalMerge,
 } from "./utils";
 
 /** Properties of a Stream's source. */
@@ -774,15 +777,64 @@ export default class Stream<T> implements Iterable<T> {
         });
     }
 
-    /** Performs a zipper merge with the given Iterable. */
-    public merge<O>(other: Iterable<O>): Stream<T | O> {
-        return new Stream(eager(merge(this.getBaseSource(), other)), {
+    // TODO docs
+    public looseMerge<O>(other: Iterable<O>): Stream<[T, O]>;
+    // TODO docs
+    public looseMerge<O, R>(
+        other: Iterable<O>,
+        merger: (t: T | undefined, o: O | undefined) => R
+    ): Stream<R>;
+    public looseMerge<O>(
+        other: Iterable<O>,
+        merger: (t: T | undefined, o: O | undefined) => any = (t, o) => [t, o]
+    ): Stream<any> {
+        return new Stream(eager(looseMerge(this, other, merger)), {
             immutable:
                 this.sourceProperties.immutable &&
                 other instanceof Stream &&
                 other.sourceProperties.immutable,
         });
     }
+
+        // TODO docs
+        public merge<O>(other: Iterable<O>): Stream<[T, O]>;
+        // TODO docs
+        public merge<O, R>(
+            other: Iterable<O>,
+            merger: (t: T, o: O) => R
+        ): Stream<R>;
+        public merge<O>(
+            other: Iterable<O>,
+            merger: (t: T, o: O) => any = (t, o) => [t, o]
+        ): Stream<any> {
+            return new Stream(eager(equalMerge(this, other, merger)), {
+                immutable:
+                    this.sourceProperties.immutable &&
+                    other instanceof Stream &&
+                    other.sourceProperties.immutable,
+            });
+        }
+
+    /** Performs a zipper merge with the given Iterable. */
+    public zipperMerge<O>(other: Iterable<O>): Stream<T | O> {
+        return new Stream(eager(zipperMerge(this.getBaseSource(), other)), {
+            immutable:
+                this.sourceProperties.immutable &&
+                other instanceof Stream &&
+                other.sourceProperties.immutable,
+        });
+    }
+
+    // TODO docs
+    public equalZipperMerge<O>(other: Iterable<O>): Stream<T | O> {
+        return new Stream(eager(equalZipperMerge(this.getBaseSource(), other)), {
+            immutable:
+                this.sourceProperties.immutable &&
+                other instanceof Stream &&
+                other.sourceProperties.immutable,
+        });
+    }
+
 
     /** Keeps only the values that are in both the Stream and the given Iterable */
     public intersect(other: Iterable<T>): Stream<T> {
@@ -1154,13 +1206,12 @@ export default class Stream<T> implements Iterable<T> {
         return join(this.getBaseSource(), separator);
     }
 
-    /** Returns a Stream with sub-Stream elements concatenated into it. */
-    public flat(): Stream<T extends Iterable<infer subT> ? subT : unknown> {
+    /** Returns a Stream with sub-Iterable elements concatenated into it. */
+    public flat(): Stream<T extends Iterable<infer SubT> ? SubT : T> {
         const self = this;
         return Stream.iter(function* () {
             for (const value of self) {
-                if (isIterable(value))
-                    yield* value;
+                if (isIterable(value)) yield* value;
                 else yield value;
             }
         }) as any;
