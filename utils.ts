@@ -35,23 +35,37 @@ export function lazy<T>(getter: () => T): () => T {
     return () => resultGetter();
 }
 
-export function lazyCachedIterable<T>(iterable: Iterable<T>) {
+/**
+ * @returns An Iterable over the given Iterator. The output of the Iterable is lazily cached. This means that the first time it's iterated is the only time the Iterator is iterated. After this the cached output of the Iterator is what's iterated
+ */
+export function lazyCacheIterator<T>(iterator: Iterator<T>): Iterable<T> {
     const cache: T[] = [];
-    const iterator = iterable[Symbol.iterator]();
+    let done = false;
 
     return iter(function* () {
         yield* cache;
 
-        let next;
+        if (done) return;
+
+        let next: IteratorResult<T, unknown>;
         while (!(next = iterator.next()).done) {
             cache.push(next.value);
             yield next.value;
         }
+
+        done = true;
     });
 }
 
+/**
+ * @returns A cached Iterable over the given Iterable. The output of the Iterable is lazily cached. This means that the first time it's iterated is the only time the given Iterable is iterated. After this the cached output of the Iterable is what's iterated
+ */
+export function lazyCacheIterable<T>(iterable: Iterable<T>): Iterable<T>{
+    return lazyCacheIterator(iterable[Symbol.iterator]());
+}
+
 /** @returns An Iterable over the Generator from the given function */
-export function iter<T>(generatorGetter: () => Generator<T>) {
+export function iter<T>(generatorGetter: () => Generator<T>): Iterable<T> {
     return {
         [Symbol.iterator]: generatorGetter,
     };
@@ -537,9 +551,11 @@ export function multiCompare<T>(a: T, b: T, orders: Iterable<Order<T>>) {
     return 0;
 }
 
-export function flat<SubT>(collection: Iterable<Iterable<SubT>>): Iterable<SubT> {
-    return iter(function* (){
-        for(const value of collection) {
+export function flat<SubT>(
+    collection: Iterable<Iterable<SubT>>
+): Iterable<SubT> {
+    return iter(function* () {
+        for (const value of collection) {
             yield* value;
         }
     });
@@ -552,19 +568,21 @@ export function zipperMerge<A, B>(
     return iter(function* () {
         const iterA = a[Symbol.iterator]();
         const iterB = b[Symbol.iterator]();
-        let nextA;
-        let nextB;
+        let nextA: IteratorResult<A>;
+        let nextB: IteratorResult<B>;
 
-        while (and(!(nextA = iterA.next()), !(nextB = iterB.next()))) {
+        while (
+            and(!(nextA = iterA.next()).done, !(nextB = iterB.next()).done)
+        ) {
             yield nextA.value as A;
             yield nextB.value as B;
         }
 
-        if (nextA?.done === false) {
+        if (nextA.done === false) {
             do {
                 yield nextA.value as A;
             } while (!(nextA = iterA.next()).done);
-        } else if (nextB?.done === false) {
+        } else if (nextB.done === false) {
             do {
                 yield nextB.value as B;
             } while (!(nextB = iterB.next()).done);
@@ -572,11 +590,22 @@ export function zipperMerge<A, B>(
     });
 }
 
-export function equalZipperMerge<A, B>(
+export function equalLengthZipperMerge<A, B>(
     a: Iterable<A>,
     b: Iterable<B>
 ): Iterable<A | B> {
-    return flat(equalMerge(a, b));
+    return iter(function* () {
+        const iterA = a[Symbol.iterator]();
+        const iterB = b[Symbol.iterator]();
+        let nextA: IteratorResult<A, A>;
+        let nextB: IteratorResult<B, B>;
+        while (
+            and(!(nextA = iterA.next()).done, !(nextB = iterB.next()).done)
+        ) {
+            yield nextA.value;
+            yield nextB.value;
+        }
+    });
 }
 
 export function merge<A, B>(
@@ -629,7 +658,9 @@ export function equalMerge<A, B>(
         let nextA: IteratorResult<A>;
         let nextB: IteratorResult<B>;
 
-        while (and(!(nextA = iterA.next()).done, !(nextB = iterB.next()).done)) {
+        while (
+            and(!(nextA = iterA.next()).done, !(nextB = iterB.next()).done)
+        ) {
             yield merger(nextA.value, nextB.value);
         }
     });

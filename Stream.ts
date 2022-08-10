@@ -21,7 +21,7 @@ import {
     count,
     smartCompare,
     zipperMerge,
-    equalZipperMerge,
+    equalLengthZipperMerge as equalLengthZipperMerge,
     DeLiteral as DeLiteral,
     SmartCompareOptions,
     EntryLike,
@@ -63,13 +63,14 @@ import {
     takeSparse,
     ValueOfArray,
     IsWhitespaceOnly,
-    lazyCachedIterable,
+    lazyCacheIterator,
     lastOrUndefined,
     lastOrDefault,
     empty,
     indexOf,
     merge as looseMerge,
     equalMerge,
+    lazyCacheIterable,
 } from "./utils";
 
 /** Properties of a Stream's source. */
@@ -826,8 +827,8 @@ export default class Stream<T> implements Iterable<T> {
     }
 
     // TODO docs
-    public equalZipperMerge<O>(other: Iterable<O>): Stream<T | O> {
-        return new Stream(eager(equalZipperMerge(this.getBaseSource(), other)), {
+    public equalLengthZipperMerge<O>(other: Iterable<O>): Stream<T | O> {
+        return new Stream(eager(equalLengthZipperMerge(this.getBaseSource(), other)), {
             immutable:
                 this.sourceProperties.immutable &&
                 other instanceof Stream &&
@@ -1529,7 +1530,7 @@ export class OrderedStream<T> extends Stream<T> {
                         : [...source];
 
                 sorted.sort((a, b) =>
-                    multiCompare(a, b, lazyCachedIterable(orderedBy))
+                    multiCompare(a, b, lazyCacheIterable(orderedBy))
                 );
 
                 return sorted;

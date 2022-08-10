@@ -147,7 +147,7 @@ async function main() {
     console.log(stm.concat([["a", "b"], ";alksjdf", ["q", "z"]] as const).asArray())
 
     const vect1 = Stream.of([1,2,3] as const);
-    const vect2 = Stream.of([5,"a",7,2] as const).filterTo("number").skip(0);
+    const vect2 = Stream.of([5,"a",7,2] as const).filterTo("number");
 
     const dotProduct = vect1.merge(vect2, (a, b) => a * b).reduce((p, c) => p + c);
     console.log(dotProduct);
