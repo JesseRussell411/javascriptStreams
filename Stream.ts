@@ -71,16 +71,21 @@ import {
     merge as looseMerge,
     equalMerge,
     lazyCacheIterable,
+    IsNumberLiteral,
+    IsBigIntLiteral,
+    IsStringLiteral,
+    concat,
 } from "./utils";
 
 /** Properties of a Stream's source. */
 export interface StreamSourceProperties<T> {
     /** Whether the Iterable from {@link Stream.getSource} is a new instance every time that can be modified safely. */
-    oneOff?: boolean;
+    readonly oneOff?: boolean;
     /** Whether the values in the Iterable from {@link Stream.getSource} will never change. Note that this doesn't mean the values themselves can't be mutable (like if the values are object, they can have mutable fields), it just means that the values can't be swapped out with other values, can't be re-arranged, or removed and values cannot be added into the source. Essentially, the source can't change but the values in the source can. */
-    immutable?: boolean;
+    readonly immutable?: boolean;
 }
 
+// TODO docs
 export default class Stream<T> implements Iterable<T> {
     /** Returns the Source Iterable that the Stream is over. */
     protected readonly getSource: () => Iterable<T>;
@@ -215,7 +220,7 @@ export default class Stream<T> implements Iterable<T> {
 
     /** @returns A Stream of the given mapping from the original Stream. Like {@link Array.map}. */
     public map<R>(mapping: (value: T, index: number) => R): Stream<R> {
-        return Stream.of(map(this.getBaseSource(), mapping));
+        return new MappedStream(this.getSource, [mapping]);
     }
 
     /**
@@ -223,7 +228,8 @@ export default class Stream<T> implements Iterable<T> {
      * @param test Whether the given value passes the filter. Return true to include the value in the returned Stream and false to not include it.
      */
     public filter(test: (value: T, index: number) => boolean): Stream<T> {
-        return Stream.of(filter(this.getBaseSource(), test));
+        // return Stream.of(filter(this.getBaseSource(), test));
+        return new FilteredStream(this.getSource, [test]);
     }
 
     /**
@@ -330,6 +336,24 @@ export default class Stream<T> implements Iterable<T> {
                         new Stream(() => outer, { oneOff: true })
                     )
             )
+        );
+    }
+
+    // TODO docs
+    public indexBy<K>(keySelector: (value: T, index: number) => K) {
+        return new Stream(
+            () => {
+                const index = new Map<K, T>();
+
+                const source = this.getBaseSource();
+
+                let i = 0;
+                for (const value of this)
+                    index.set(keySelector(value, i++), value);
+
+                return index;
+            },
+            { oneOff: true }
         );
     }
 
@@ -797,24 +821,24 @@ export default class Stream<T> implements Iterable<T> {
         });
     }
 
-        // TODO docs
-        public merge<O>(other: Iterable<O>): Stream<[T, O]>;
-        // TODO docs
-        public merge<O, R>(
-            other: Iterable<O>,
-            merger: (t: T, o: O) => R
-        ): Stream<R>;
-        public merge<O>(
-            other: Iterable<O>,
-            merger: (t: T, o: O) => any = (t, o) => [t, o]
-        ): Stream<any> {
-            return new Stream(eager(equalMerge(this, other, merger)), {
-                immutable:
-                    this.sourceProperties.immutable &&
-                    other instanceof Stream &&
-                    other.sourceProperties.immutable,
-            });
-        }
+    // TODO docs
+    public merge<O>(other: Iterable<O>): Stream<[T, O]>;
+    // TODO docs
+    public merge<O, R>(
+        other: Iterable<O>,
+        merger: (t: T, o: O) => R
+    ): Stream<R>;
+    public merge<O>(
+        other: Iterable<O>,
+        merger: (t: T, o: O) => any = (t, o) => [t, o]
+    ): Stream<any> {
+        return new Stream(eager(equalMerge(this, other, merger)), {
+            immutable:
+                this.sourceProperties.immutable &&
+                other instanceof Stream &&
+                other.sourceProperties.immutable,
+        });
+    }
 
     /** Performs a zipper merge with the given Iterable. */
     public zipperMerge<O>(other: Iterable<O>): Stream<T | O> {
@@ -828,14 +852,16 @@ export default class Stream<T> implements Iterable<T> {
 
     // TODO docs
     public equalLengthZipperMerge<O>(other: Iterable<O>): Stream<T | O> {
-        return new Stream(eager(equalLengthZipperMerge(this.getBaseSource(), other)), {
-            immutable:
-                this.sourceProperties.immutable &&
-                other instanceof Stream &&
-                other.sourceProperties.immutable,
-        });
+        return new Stream(
+            eager(equalLengthZipperMerge(this.getBaseSource(), other)),
+            {
+                immutable:
+                    this.sourceProperties.immutable &&
+                    other instanceof Stream &&
+                    other.sourceProperties.immutable,
+            }
+        );
     }
-
 
     /** Keeps only the values that are in both the Stream and the given Iterable */
     public intersect(other: Iterable<T>): Stream<T> {
@@ -1516,7 +1542,8 @@ export class OrderedStream<T> extends Stream<T> {
         getSource: () => Iterable<T>,
         orderedBy: Iterable<Order<T>>,
         sourceProperties: StreamSourceProperties<T> = {},
-        getPreSortedSource?: () => Iterable<T>
+        getPreSortedSource?: () => Iterable<T>,
+        preSortedSourceProperties: StreamSourceProperties<T> = {}
     ) {
         super(
             () => {
@@ -1535,11 +1562,9 @@ export class OrderedStream<T> extends Stream<T> {
 
                 return sorted;
             },
-            {
-                oneOff:
-                    sourceProperties.oneOff ??
-                    (getPreSortedSource === undefined ? true : false),
-            }
+            getPreSortedSource !== undefined
+                ? preSortedSourceProperties
+                : { oneOff: true }
         );
 
         this.originalGetSource = getSource;
@@ -1569,7 +1594,8 @@ export class OrderedStream<T> extends Stream<T> {
             this.originalGetSource,
             this.orderedBy,
             {},
-            eager(this.toArray())
+            eager(this.toArray()),
+            { oneOff: true, immutable: true }
         );
     }
 
@@ -1578,7 +1604,8 @@ export class OrderedStream<T> extends Stream<T> {
             this.originalGetSource,
             this.orderedBy,
             {},
-            lazy(() => this.toArray())
+            lazy(() => this.toArray()),
+            { oneOff: true, immutable: true }
         );
     }
 }
@@ -1657,14 +1684,26 @@ export type TypeFilterTest<Option extends TypeFilterOption, T> =
     : Option extends "0"
     ? T extends 0
         ? T
+        : IsNumberLiteral<T> extends false
+        ? T extends number
+            ? number
+            : never
         : never
     : Option extends "0n"
     ? T extends 0n
         ? T
+        : IsBigIntLiteral<T> extends false
+        ? T extends bigint
+            ? bigint
+            : never
         : never
     : Option extends "emptyString"
     ? T extends ""
         ? T
+        : IsStringLiteral<T> extends false
+        ? T extends string
+            ? string
+            : never
         : never
     : never;
 
@@ -1826,6 +1865,7 @@ export class TypeFilteredStream<
     }
 }
 
+// TODO docs
 export class TypeFilteredOutStream<
     Options extends TypeFilterOption,
     Result
@@ -1878,5 +1918,100 @@ export class TypeFilteredOutStream<
             [],
             { immutable: true }
         );
+    }
+}
+
+// TODO docs
+export class MappedStream<T, R> extends Stream<R> {
+    private readonly originalGetSource: () => Iterable<T>;
+    private readonly mappings:
+        | [(value: T, index: number) => R]
+        | [
+              (value: T, index: number) => any,
+              ...((value: any, index: number) => any)[],
+              (value: any, index: number) => R
+          ];
+    public constructor(
+        getSource: () => Iterable<T>,
+        mappings:
+            | [(value: T, index: number) => R]
+            | [
+                  (value: T, index: number) => any,
+                  ...((value: any, index: number) => any)[],
+                  (value: any, index: number) => R
+              ]
+    ) {
+        super(() =>
+            map(Stream.getBaseSourceOf(getSource()), (value, index) => {
+                let result = mappings[0]!(value, index);
+                for (let i = 1; i < mappings.length; i++)
+                    result = mappings[i]!(result, index);
+                return result;
+            })
+        );
+        this.originalGetSource = getSource;
+        this.mappings = mappings;
+    }
+
+    // TODO docs
+    public map<NewR>(
+        mapping: (value: R, index: number) => NewR
+    ): MappedStream<T, NewR> {
+        return new MappedStream(this.originalGetSource, [
+            ...this.mappings,
+            mapping,
+        ]);
+    }
+
+    // TODO docs
+    public at(index: number | bigint): R | undefined {
+        const sourceValue = at(
+            Stream.getBaseSourceOf(this.originalGetSource()),
+            index
+        );
+
+        if (sourceValue === undefined) return undefined;
+
+        const indexAsNumber = Number(index);
+
+        let result: any = this.mappings[0](sourceValue, indexAsNumber);
+        for (let i = 1; i < this.mappings.length; i++)
+            result = this.mappings[i]!(result, indexAsNumber);
+        
+        return result;
+    }
+}
+
+// TODO docs
+class FilteredStream<T> extends Stream<T> {
+    private originalGetSource: () => Iterable<T>;
+    private filters: ((value: T, index: number) => boolean)[];
+
+    public constructor(
+        getSource: () => Iterable<T>,
+        filters: ((value: T, index: number) => boolean)[]
+    ) {
+        super(() => {
+            return filter(
+                Stream.getBaseSourceOf(getSource()),
+                (value, index) => {
+                    for (let i = 0; i < filters.length; i++)
+                        if (!filters[i]!(value, index)) return false;
+                    return true;
+                }
+            );
+        });
+        this.originalGetSource = getSource;
+        this.filters = filters;
+    }
+
+    // TODO docs
+    public filter(
+        test: (value: T, index: number) => boolean
+    ): FilteredStream<T> {
+        return new FilteredStream(this.originalGetSource, [
+            ...this.filters,
+            test,
+        ]);
     }
 }

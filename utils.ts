@@ -2,6 +2,7 @@ import Stream from "./Stream";
 import { and, or } from "./logic";
 import { StreamableArray } from "./Streamable";
 import { toASCII } from "punycode";
+import { isNumberObject } from "util/types";
 
 /**
  * @returns Returns a function which returns the given value.
@@ -60,7 +61,7 @@ export function lazyCacheIterator<T>(iterator: Iterator<T>): Iterable<T> {
 /**
  * @returns A cached Iterable over the given Iterable. The output of the Iterable is lazily cached. This means that the first time it's iterated is the only time the given Iterable is iterated. After this the cached output of the Iterable is what's iterated
  */
-export function lazyCacheIterable<T>(iterable: Iterable<T>): Iterable<T>{
+export function lazyCacheIterable<T>(iterable: Iterable<T>): Iterable<T> {
     return lazyCacheIterator(iterable[Symbol.iterator]());
 }
 
@@ -84,10 +85,18 @@ export function map<T, R>(
     collection: Iterable<T>,
     mapping: (value: T, index: number) => R
 ): Iterable<R> {
-    return iter(function* () {
-        let index = 0;
-        for (const value of collection) yield mapping(value, index++);
-    });
+    if (isArray(collection)) {
+        return iter(function* () {
+            // take advantage of faster iteration if possible
+            for (let i = 0; i < collection.length; i++)
+                yield mapping(collection[i]!, i);
+        });
+    } else {
+        return iter(function* () {
+            let index = 0;
+            for (const value of collection) yield mapping(value, index++);
+        });
+    }
 }
 
 export function filter<T>(
@@ -98,10 +107,21 @@ export function filter<T>(
     collection: Iterable<T>,
     test: (value: T, index: number) => boolean
 ): Iterable<T> {
-    return iter(function* () {
-        let index = 0;
-        for (const value of collection) if (test(value, index++)) yield value;
-    });
+    if (isArray(collection)) {
+        // take advantage of faster iteration if possible
+        return iter(function* () {
+            for (let i = 0; i < collection.length; i++) {
+                const value = collection[i]!;
+                if (test(value, i)) yield value;
+            }
+        });
+    } else {
+        return iter(function* () {
+            let index = 0;
+            for (const value of collection)
+                if (test(value, index++)) yield value;
+        });
+    }
 }
 
 export function concat<A, B>(a: Iterable<A>, b: Iterable<B>): Iterable<A | B> {
@@ -109,19 +129,6 @@ export function concat<A, B>(a: Iterable<A>, b: Iterable<B>): Iterable<A | B> {
         yield* a;
         yield* b;
     });
-}
-
-export function combine<
-    O1 extends Record<any, any>,
-    O2 extends Record<any, any>
->(o1: O1, o2: O2): O1 & O2 {
-    const result = { ...o1 } as Record<any, any>;
-
-    for (const key in o2 as object) {
-        result[key] = o2[key];
-    }
-
-    return result;
 }
 
 export function partialCopy<T>(o: T, toCopy: (keyof T)[]): any {
@@ -379,6 +386,19 @@ export type KeyOfArray<T extends readonly any[] | any[]> = Intersection<
 
 export type ValueOfArray<T extends readonly any[] | any[]> = T[KeyOfArray<T>];
 
+export type DigitCharacter =
+    | "0"
+    | "1"
+    | "2"
+    | "3"
+    | "4"
+    | "5"
+    | "6"
+    | "7"
+    | "8"
+    | "9";
+export type BigIntCharacter = DigitCharacter | "-";
+export type NumberCharacter = BigIntCharacter | ".";
 export type WhitespaceCharacter = " " | "\n" | "\t" | "\r" | "\v" | "\f";
 export type IsWhitespaceOnly<T> = T extends WhitespaceCharacter
     ? true
@@ -390,6 +410,27 @@ export type Includes<
     Haystack extends string,
     Needle extends string | number | bigint | boolean | null | undefined
 > = Haystack extends `${string}${Needle}${string}` ? true : false;
+
+export type IsStringLiteral<T> = T extends `${infer _}` ? true : false;
+export type IsNumberLiteral<T> = T extends number
+    ? `${T}` extends `${NumberCharacter}${infer _}`
+        ? true
+        : false
+    : false;
+
+export type IsBigIntLiteral<T> = T extends bigint
+    ? `${T}` extends `${NumberCharacter}${infer _}`
+        ? true
+        : false
+    : false;
+
+export type IsLiteral<T> = IsStringLiteral<T> extends true
+    ? true
+    : IsNumberLiteral<T> extends true
+    ? true
+    : IsBigIntLiteral<T> extends true
+    ? true
+    : false;
 
 export function asNumber(
     value: boolean | number | bigint | null | undefined
@@ -1081,7 +1122,7 @@ export function getNonIteratedCount(
 
 export class Random {
     // one day, I'll add a seed parameter to this class.
-    range = (
+    public range = (
         lowerBound: number | bigint,
         upperBound: number | bigint
     ): number => {
@@ -1090,20 +1131,20 @@ export class Random {
         return Math.random() * (max - min) + min;
     };
 
-    int = (
+    public int = (
         lowerBound: number | bigint,
         upperBound: number | bigint
     ): number => {
         return Math.trunc(this.range(lowerBound, upperBound));
     };
 
-    choice = <T>(options: ReadonlySolid<T> | Solid<T>): T => {
+    public choice = <T>(options: ReadonlySolid<T> | Solid<T>): T => {
         const size = getNonIteratedCount(options);
         if (size === 0) throw new Error("no options to choose from");
         return at(options, this.int(0, size))!;
     };
 
-    chooseAndRemove = <T>(options: Solid<T>): T => {
+    public chooseAndRemove = <T>(options: Solid<T>): T => {
         const size = getNonIteratedCount(options);
         if (size === 0) throw new Error("no options to choose from");
         if (Array.isArray(options)) {
@@ -1121,6 +1162,8 @@ export class Random {
             "Options is neither an Array, Set, or Map. This should not be possible unless the type system was ignored."
         );
     };
+
+    public boolean = (chanceOfTrue: number = 0.5) => this.range(0, 1) < chanceOfTrue;
 }
 
 export const random = new Random();
@@ -1262,3 +1305,94 @@ export function take<T>(
         }
     });
 }
+
+/**
+ * Performs a reduction of the values in the collection. Like {@link Array.reduce}.
+ * @throws If The collection is empty.
+ */
+export function reduce<T>(
+    collection: Iterable<T>,
+    reduction: (
+        previousResult: DeLiteral<T>,
+        current: T,
+        index: number
+    ) => DeLiteral<T>
+): DeLiteral<T>;
+
+/**
+ * Performs a reduction of the values in the collection. Like {@link array.reduce}.
+ */
+export function reduce<T, R>(
+    collection: Iterable<T>,
+    reduction: (previousResult: R, current: T, index: number) => R,
+    initialValue: R
+): R;
+
+export function reduce<T>(
+    collection: Iterable<T>,
+    reduction: (previousResult: any, current: T, index: number) => any,
+    initialValue?: any
+): any {
+    const iterator = collection[Symbol.iterator]();
+    let next;
+    let result;
+    let index: number;
+
+    if (arguments.length > 2) {
+        result = initialValue;
+        index = 0;
+    } else {
+        next = iterator.next();
+        if (next.done)
+            throw new Error("reduce of empty Stream with no initial value");
+        result = next.value;
+        index = 1;
+    }
+
+    while (!(next = iterator.next()).done) {
+        result = reduction(result, next.value, index);
+    }
+
+    return result;
+}
+
+export function average(numbers: Iterable<number | bigint>): number | bigint {
+    let adder = (a: number | bigint, b: number | bigint): number | bigint => {
+        if (typeof a === "bigint" && typeof b === "bigint") {
+            return a + b;
+        } else {
+            adder = (a: number | bigint, b: number | bigint) =>
+                Number(a) + Number(b);
+            return Number(a) + Number(b);
+        }
+    };
+
+    const nonIteratedCount = getNonIteratedCountOrUndefined(numbers);
+    let count = 1n;
+
+    const total = reduce(
+        numbers,
+        nonIteratedCount === undefined
+            ? (prev, curr) => {
+                  count++;
+                  return adder(prev, curr);
+              }
+            : (prev, curr) => adder(prev, curr)
+    );
+
+    if (typeof total === "number") {
+        if (nonIteratedCount !== undefined) {
+            return total / nonIteratedCount;
+        } else {
+            return total / Number(count);
+        }
+    } else {
+        if (nonIteratedCount !== undefined) {
+            return total / BigInt(nonIteratedCount);
+        } else {
+            return total / count;
+        }
+    }
+}
+
+

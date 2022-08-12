@@ -2,6 +2,7 @@ import Stream from "./Stream";
 import { StreamableArray } from "./Streamable";
 import { getTestData } from "./getTestData";
 import {
+    average,
     breakSignal,
     DeLiteral,
     distinct,
@@ -142,15 +143,69 @@ async function main() {
         .and("undefined")
         .skip(0);
 
-    const stm = Stream.of([1,2,3,4,5] as const);
-    console.log(stm.concat([["a", "b"], ";alksjdf", ["q", "z"]] as const).asArray())
-    console.log(stm.concat([["a", "b"], ";alksjdf", ["q", "z"]] as const).asArray())
+    const stm = Stream.of([1, 2, 3, 4, 5] as const);
+    console.log(
+        stm.concat([["a", "b"], ";alksjdf", ["q", "z"]] as const).asArray()
+    );
+    console.log(
+        stm.concat([["a", "b"], ";alksjdf", ["q", "z"]] as const).asArray()
+    );
 
-    const vect1 = Stream.of([1,2,3] as const);
-    const vect2 = Stream.of([5,"a",7,2] as const).filterTo("number");
+    const vect1 = Stream.of([1, 2, 3] as const);
+    const vect2 = Stream.of([5, "a", 7, 2, true] as const)
+        .filterOut("string")
+        .and("boolean");
 
-    const dotProduct = vect1.merge(vect2, (a, b) => a * b).reduce((p, c) => p + c);
+    const dotProduct = vect1
+        .merge(vect2, (a, b) => a * b)
+        .reduce((p, c) => p + c);
     console.log(dotProduct);
+
+    const iterations = 4;
+    const chains = 1000;
+    const source = range(1000);
+
+    for (let j = 0; j < 10; j++) {
+        const streamTimes = [
+            ...(function* () {
+                for (let i = 0; i < iterations; i++) {
+                    const sw = new Stopwatch();
+                    let stream = Stream.of([...source]);
+                    sw.restart();
+
+                    for (let x = 0; x < chains; x++) {
+                        stream = stream.filter(() => random.boolean(.9));
+                        console.error("junk");
+                    }
+
+                    stream.benchmark();
+                    sw.stop();
+                    yield sw.elapsedTimeInMilliseconds;
+                }
+            })(),
+        ];
+        console.log("stream:", average(streamTimes));
+
+        const arrayTimes = [
+            ...(function* () {
+                for (let i = 0; i < iterations; i++) {
+                    const sw = new Stopwatch();
+                    let array = [...source];
+                    sw.restart();
+                    for (let x = 0; x < chains; x++) {
+                        array = array.filter(() => random.boolean(.9));
+                        const n = array[array.length - 1];
+                        console.error(n);
+                    }
+
+                    sw.stop();
+                    yield sw.elapsedTimeInMilliseconds;
+                }
+            })(),
+        ];
+
+        console.log(" array:", average(arrayTimes));
+    }
 
     // console.log(nandb.asArray());
 
