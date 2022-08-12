@@ -228,7 +228,6 @@ export default class Stream<T> implements Iterable<T> {
      * @param test Whether the given value passes the filter. Return true to include the value in the returned Stream and false to not include it.
      */
     public filter(test: (value: T, index: number) => boolean): Stream<T> {
-        // return Stream.of(filter(this.getBaseSource(), test));
         return new FilteredStream(this.getSource, [test]);
     }
 
@@ -248,7 +247,7 @@ export default class Stream<T> implements Iterable<T> {
     /**
      * Filters the stream to values that aren't the specified type. Use {@link TypeFilteredOutStream.and} to add more constraints.
      */
-    filterOut<Option extends TypeFilterOption>(
+    public filterOut<Option extends TypeFilterOption>(
         option: Option
     ): TypeFilteredOutStream<Option, TypeFilterOutTest<Option, T>> {
         return new TypeFilteredOutStream(
@@ -1534,13 +1533,13 @@ export default class Stream<T> implements Iterable<T> {
  * A {@link Stream} ordered by a collection of Comparators. Use {@link OrderedStream.thenBy} to add more comparators to sort by.
  */
 export class OrderedStream<T> extends Stream<T> {
-    protected readonly orderedBy: Iterable<Order<T>>;
+    protected readonly orderedBy: Order<T>[];
     protected readonly originalGetSource: () => Iterable<T>;
     protected readonly getPreSortedSource?: () => Iterable<T>;
 
     public constructor(
         getSource: () => Iterable<T>,
-        orderedBy: Iterable<Order<T>>,
+        orderedBy: Order<T>[],
         sourceProperties: StreamSourceProperties<T> = {},
         getPreSortedSource?: () => Iterable<T>,
         preSortedSourceProperties: StreamSourceProperties<T> = {}
@@ -1556,9 +1555,7 @@ export class OrderedStream<T> extends Stream<T> {
                         ? (source as T[])
                         : [...source];
 
-                sorted.sort((a, b) =>
-                    multiCompare(a, b, lazyCacheIterable(orderedBy))
-                );
+                sorted.sort((a, b) => multiCompare(a, b, orderedBy));
 
                 return sorted;
             },
@@ -1578,7 +1575,7 @@ export class OrderedStream<T> extends Stream<T> {
     public thenBy(order: Order<T>): OrderedStream<T> {
         return new OrderedStream(
             this.originalGetSource,
-            append(this.orderedBy, order),
+            [...this.orderedBy, order],
             this.sourceProperties
         );
     }
@@ -1817,11 +1814,11 @@ export class TypeFilteredStream<
     Options extends TypeFilterOption,
     Result
 > extends Stream<Result> {
-    private readonly tests: Iterable<(value: any) => boolean>;
+    private readonly tests: ((value: any) => boolean)[];
     private readonly originalGetSource: () => Iterable<any>;
     public constructor(
         getSource: () => Iterable<any>,
-        tests: Iterable<(value: any) => boolean>,
+        tests: ((value: any) => boolean)[],
         sourceProperties: StreamSourceProperties<any>
     ) {
         super(() => {
@@ -1845,7 +1842,7 @@ export class TypeFilteredStream<
 
         return new TypeFilteredStream(
             this.originalGetSource,
-            append(this.tests, test),
+            [...this.tests, test],
             this.sourceProperties
         ) as any;
     }
@@ -1863,6 +1860,13 @@ export class TypeFilteredStream<
             { immutable: true }
         );
     }
+
+    public filter(test: (value: Result, index: number) => boolean) {
+        return new FilteredStream(this.originalGetSource, [
+            ...this.tests,
+            test,
+        ]);
+    }
 }
 
 // TODO docs
@@ -1870,11 +1874,11 @@ export class TypeFilteredOutStream<
     Options extends TypeFilterOption,
     Result
 > extends Stream<Result> {
-    private readonly tests: Iterable<(value: any) => boolean>;
+    private readonly tests: ((value: any) => boolean)[];
     private readonly originalGetSource: () => Iterable<any>;
     public constructor(
         getSource: () => Iterable<any>,
-        tests: Iterable<(value: any) => boolean>,
+        tests: ((value: any) => boolean)[],
         sourceProperties: StreamSourceProperties<any>
     ) {
         super(() => {
@@ -1901,7 +1905,7 @@ export class TypeFilteredOutStream<
 
         return new TypeFilteredOutStream(
             this.originalGetSource,
-            append(this.tests, test),
+            [...this.tests, test],
             this.sourceProperties
         ) as any;
     }
@@ -1918,6 +1922,13 @@ export class TypeFilteredOutStream<
             [],
             { immutable: true }
         );
+    }
+
+    public filter(test: (value: Result, index: number) => boolean) {
+        return new FilteredStream(this.originalGetSource, [
+            ...this.tests.map(test => (v: any) => !test(v)),
+            test,
+        ]);
     }
 }
 
@@ -1977,7 +1988,7 @@ export class MappedStream<T, R> extends Stream<R> {
         let result: any = this.mappings[0](sourceValue, indexAsNumber);
         for (let i = 1; i < this.mappings.length; i++)
             result = this.mappings[i]!(result, indexAsNumber);
-        
+
         return result;
     }
 }
@@ -2005,7 +2016,6 @@ class FilteredStream<T> extends Stream<T> {
         this.filters = filters;
     }
 
-    // TODO docs
     public filter(
         test: (value: T, index: number) => boolean
     ): FilteredStream<T> {
