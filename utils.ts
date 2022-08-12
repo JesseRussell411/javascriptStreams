@@ -99,10 +99,10 @@ export function map<T, R>(
     }
 }
 
-export function filter<T>(
+export function filter<T, R extends T = T>(
     collection: Iterable<T>,
     test: (value: T, index: number) => boolean
-): Iterable<T>;
+): Iterable<R>;
 export function filter<T>(
     collection: Iterable<T>,
     test: (value: T, index: number) => boolean

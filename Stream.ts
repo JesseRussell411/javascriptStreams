@@ -236,7 +236,7 @@ export default class Stream<T> implements Iterable<T> {
      */
     public filterTo<Option extends TypeFilterOption>(
         option: Option
-    ): TypeFilteredStream<Option, TypeFilterTest<Option, T>> {
+    ): TypeFilteredStream<T, TypeFilterTest<Option, T>, Option> {
         return new TypeFilteredStream(
             this.getSource,
             [getTypeFilterTest(option)],
@@ -249,7 +249,7 @@ export default class Stream<T> implements Iterable<T> {
      */
     public filterOut<Option extends TypeFilterOption>(
         option: Option
-    ): TypeFilteredOutStream<Option, TypeFilterOutTest<Option, T>> {
+    ): TypeFilteredOutStream<T, TypeFilterOutTest<Option, T>, Option> {
         return new TypeFilteredOutStream(
             this.getSource,
             [getTypeFilterTest(option)],
@@ -1607,6 +1607,103 @@ export class OrderedStream<T> extends Stream<T> {
     }
 }
 
+// TODO docs
+export class MappedStream<T, R> extends Stream<R> {
+    private readonly originalGetSource: () => Iterable<T>;
+    private readonly mappings:
+        | readonly [(value: T, index: number) => R]
+        | readonly [
+              (value: T, index: number) => any,
+              ...((value: any, index: number) => any)[],
+              (value: any, index: number) => R
+          ];
+    public constructor(
+        getSource: () => Iterable<T>,
+        mappings:
+            | readonly [(value: T, index: number) => R]
+            | readonly [
+                  (value: T, index: number) => any,
+                  ...((value: any, index: number) => any)[],
+                  (value: any, index: number) => R
+              ]
+    ) {
+        super(() =>
+            map(Stream.getBaseSourceOf(getSource()), (value, index) => {
+                let result = mappings[0]!(value, index);
+                for (let i = 1; i < mappings.length; i++)
+                    result = mappings[i]!(result, index);
+                return result;
+            })
+        );
+        this.originalGetSource = getSource;
+        this.mappings = mappings;
+    }
+
+    // TODO docs
+    public map<NewR>(
+        mapping: (value: R, index: number) => NewR
+    ): MappedStream<T, NewR> {
+        return new MappedStream(this.originalGetSource, [
+            ...this.mappings,
+            mapping,
+        ]);
+    }
+
+    // TODO docs
+    public at(index: number | bigint): R | undefined {
+        const sourceValue = at(
+            Stream.getBaseSourceOf(this.originalGetSource()),
+            index
+        );
+
+        if (sourceValue === undefined) return undefined;
+
+        const indexAsNumber = Number(index);
+
+        let result: any = this.mappings[0](sourceValue, indexAsNumber);
+        for (let i = 1; i < this.mappings.length; i++)
+            result = this.mappings[i]!(result, indexAsNumber);
+
+        return result;
+    }
+}
+
+// TODO docs
+class FilteredStream<S, R extends S = S> extends Stream<R> {
+    protected readonly originalGetSource: () => Iterable<S>;
+    protected readonly filters: readonly ((
+        value: S,
+        index: number
+    ) => boolean)[];
+
+    public constructor(
+        getSource: () => Iterable<S>,
+        filters: readonly ((value: S, index: number) => boolean)[]
+    ) {
+        super(() => {
+            return filter<S, R>(
+                Stream.getBaseSourceOf(getSource()),
+                (value, index) => {
+                    for (let i = 0; i < filters.length; i++)
+                        if (!filters[i]!(value, index)) return false;
+                    return true;
+                }
+            );
+        });
+        this.originalGetSource = getSource;
+        this.filters = filters;
+    }
+
+    public filter<NewR extends R = R>(
+        test: (value: R, index: number) => boolean
+    ): FilteredStream<S, NewR> {
+        return new FilteredStream<S, NewR>(this.originalGetSource, [
+            ...this.filters,
+            test,
+        ] as any);
+    }
+}
+
 export type TypeFilterOption =
     | "number"
     | "bigint"
@@ -1624,9 +1721,10 @@ export type TypeFilterOption =
     | "0n"
     | "emptyString";
 
-export type TypeFilterTest<Option extends TypeFilterOption, T> =
-    | never
-    | Option extends "number"
+export type TypeFilterTest<
+    Option extends TypeFilterOption,
+    T
+> = Option extends "number"
     ? T extends number
         ? T
         : never
@@ -1683,7 +1781,7 @@ export type TypeFilterTest<Option extends TypeFilterOption, T> =
         ? T
         : IsNumberLiteral<T> extends false
         ? T extends number
-            ? number
+            ? T
             : never
         : never
     : Option extends "0n"
@@ -1691,7 +1789,7 @@ export type TypeFilterTest<Option extends TypeFilterOption, T> =
         ? T
         : IsBigIntLiteral<T> extends false
         ? T extends bigint
-            ? bigint
+            ? T
             : never
         : never
     : Option extends "emptyString"
@@ -1699,7 +1797,7 @@ export type TypeFilterTest<Option extends TypeFilterOption, T> =
         ? T
         : IsStringLiteral<T> extends false
         ? T extends string
-            ? string
+            ? T
             : never
         : never
     : never;
@@ -1811,25 +1909,18 @@ function getTypeFilterTest(option: TypeFilterOption): (value: any) => boolean {
 }
 
 export class TypeFilteredStream<
-    Options extends TypeFilterOption,
-    Result
-> extends Stream<Result> {
-    private readonly tests: ((value: any) => boolean)[];
-    private readonly originalGetSource: () => Iterable<any>;
+    Source,
+    Result extends Source,
+    Options extends TypeFilterOption
+> extends FilteredStream<Source, Result> {
+    protected readonly sourceProperties: StreamSourceProperties<Source>;
     public constructor(
-        getSource: () => Iterable<any>,
-        tests: ((value: any) => boolean)[],
-        sourceProperties: StreamSourceProperties<any>
+        getSource: () => Iterable<Source>,
+        tests: ((value: any, index: number) => boolean)[],
+        sourceProperties: StreamSourceProperties<Source>
     ) {
-        super(() => {
-            return filter(getSource(), value => {
-                for (const test of tests) if (test(value)) return true;
-                return false;
-            }) as any;
-        }, sourceProperties);
-
-        this.tests = tests;
-        this.originalGetSource = getSource;
+        super(getSource, tests);
+        this.sourceProperties = sourceProperties;
     }
 
     /**
@@ -1837,191 +1928,83 @@ export class TypeFilteredStream<
      */
     public and<Option extends TypeFilterOption>(
         option: Option extends Options ? never : Option
-    ): TypeFilteredStream<Options | Option, TypeFilterTest<Option, Result>> {
+    ): TypeFilteredStream<
+        Source,
+        TypeFilterTest<Option, Result>,
+        Options | Option
+    > {
         const test = getTypeFilterTest(option);
 
         return new TypeFilteredStream(
             this.originalGetSource,
-            [...this.tests, test],
+            [...this.filters, test],
             this.sourceProperties
         ) as any;
     }
 
-    public solidify(): TypeFilteredStream<Options, Result> {
+    public solidify(): TypeFilteredStream<Source, Result, Options> {
         return new TypeFilteredStream(eager(this.toSolid()), [], {
             immutable: true,
         });
     }
 
-    public lazySolidify(): TypeFilteredStream<Options, Result> {
+    public lazySolidify(): TypeFilteredStream<Source, Result, Options> {
         return new TypeFilteredStream(
             lazy(() => this.toSolid()),
             [],
             { immutable: true }
         );
     }
-
-    public filter(test: (value: Result, index: number) => boolean) {
-        return new FilteredStream(this.originalGetSource, [
-            ...this.tests,
-            test,
-        ]);
-    }
 }
 
-// TODO docs
 export class TypeFilteredOutStream<
-    Options extends TypeFilterOption,
-    Result
-> extends Stream<Result> {
-    private readonly tests: ((value: any) => boolean)[];
-    private readonly originalGetSource: () => Iterable<any>;
+    Source,
+    Result extends Source,
+    Options extends TypeFilterOption
+> extends FilteredStream<Source, Result> {
+    protected readonly sourceProperties: StreamSourceProperties<Source>;
     public constructor(
-        getSource: () => Iterable<any>,
-        tests: ((value: any) => boolean)[],
-        sourceProperties: StreamSourceProperties<any>
+        getSource: () => Iterable<Source>,
+        tests: ((value: any, index: number) => boolean)[],
+        sourceProperties: StreamSourceProperties<Source>
     ) {
-        super(() => {
-            return filter(getSource(), value => {
-                for (const test of tests) if (test(value)) return false;
-                return true;
-            }) as any;
-        }, sourceProperties);
-
-        this.tests = tests;
-        this.originalGetSource = getSource;
+        super(
+            getSource,
+            tests.map(test => (v, i) => !test(v, i))
+        );
+        this.sourceProperties = sourceProperties;
     }
 
     /**
-     * Adds another type to filter out of the Stream.
+     * Adds another type to filter out of the stream.
      */
     public and<Option extends TypeFilterOption>(
         option: Option extends Options ? never : Option
-    ): TypeFilteredOutStream<
-        Options | Option,
-        TypeFilterOutTest<Option, Result>
+    ): TypeFilteredStream<
+        Source,
+        TypeFilterOutTest<Option, Result>,
+        Options | Option
     > {
         const test = getTypeFilterTest(option);
 
-        return new TypeFilteredOutStream(
+        return new TypeFilteredStream(
             this.originalGetSource,
-            [...this.tests, test],
+            [...this.filters, v => !test(v)],
             this.sourceProperties
         ) as any;
     }
 
-    public solidify(): TypeFilteredOutStream<Options, Result> {
-        return new TypeFilteredOutStream(eager(this.toSolid()), [], {
+    public solidify(): TypeFilteredStream<Source, Result, Options> {
+        return new TypeFilteredStream(eager(this.toSolid()), [], {
             immutable: true,
         });
     }
 
-    public lazySolidify(): TypeFilteredOutStream<Options, Result> {
-        return new TypeFilteredOutStream(
+    public lazySolidify(): TypeFilteredStream<Source, Result, Options> {
+        return new TypeFilteredStream(
             lazy(() => this.toSolid()),
             [],
             { immutable: true }
         );
-    }
-
-    public filter(test: (value: Result, index: number) => boolean) {
-        return new FilteredStream(this.originalGetSource, [
-            ...this.tests.map(test => (v: any) => !test(v)),
-            test,
-        ]);
-    }
-}
-
-// TODO docs
-export class MappedStream<T, R> extends Stream<R> {
-    private readonly originalGetSource: () => Iterable<T>;
-    private readonly mappings:
-        | [(value: T, index: number) => R]
-        | [
-              (value: T, index: number) => any,
-              ...((value: any, index: number) => any)[],
-              (value: any, index: number) => R
-          ];
-    public constructor(
-        getSource: () => Iterable<T>,
-        mappings:
-            | [(value: T, index: number) => R]
-            | [
-                  (value: T, index: number) => any,
-                  ...((value: any, index: number) => any)[],
-                  (value: any, index: number) => R
-              ]
-    ) {
-        super(() =>
-            map(Stream.getBaseSourceOf(getSource()), (value, index) => {
-                let result = mappings[0]!(value, index);
-                for (let i = 1; i < mappings.length; i++)
-                    result = mappings[i]!(result, index);
-                return result;
-            })
-        );
-        this.originalGetSource = getSource;
-        this.mappings = mappings;
-    }
-
-    // TODO docs
-    public map<NewR>(
-        mapping: (value: R, index: number) => NewR
-    ): MappedStream<T, NewR> {
-        return new MappedStream(this.originalGetSource, [
-            ...this.mappings,
-            mapping,
-        ]);
-    }
-
-    // TODO docs
-    public at(index: number | bigint): R | undefined {
-        const sourceValue = at(
-            Stream.getBaseSourceOf(this.originalGetSource()),
-            index
-        );
-
-        if (sourceValue === undefined) return undefined;
-
-        const indexAsNumber = Number(index);
-
-        let result: any = this.mappings[0](sourceValue, indexAsNumber);
-        for (let i = 1; i < this.mappings.length; i++)
-            result = this.mappings[i]!(result, indexAsNumber);
-
-        return result;
-    }
-}
-
-// TODO docs
-class FilteredStream<T> extends Stream<T> {
-    private originalGetSource: () => Iterable<T>;
-    private filters: ((value: T, index: number) => boolean)[];
-
-    public constructor(
-        getSource: () => Iterable<T>,
-        filters: ((value: T, index: number) => boolean)[]
-    ) {
-        super(() => {
-            return filter(
-                Stream.getBaseSourceOf(getSource()),
-                (value, index) => {
-                    for (let i = 0; i < filters.length; i++)
-                        if (!filters[i]!(value, index)) return false;
-                    return true;
-                }
-            );
-        });
-        this.originalGetSource = getSource;
-        this.filters = filters;
-    }
-
-    public filter(
-        test: (value: T, index: number) => boolean
-    ): FilteredStream<T> {
-        return new FilteredStream(this.originalGetSource, [
-            ...this.filters,
-            test,
-        ]);
     }
 }
