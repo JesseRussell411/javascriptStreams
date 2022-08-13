@@ -162,8 +162,8 @@ async function main() {
     console.log(dotProduct);
 
     const iterations = 4;
-    const chains = 10000;
-    const source = range(10000);
+    const chains = 20000;
+    const source = range(100000);
 
     for (let j = 0; j < 10; j++) {
         const streamTimes = [
@@ -174,7 +174,7 @@ async function main() {
                     sw.restart();
 
                     for (let x = 0; x < chains; x++) {
-                        stream = stream.filter(() => random.boolean(.9));
+                        stream = stream.filter(() => random.boolean(.999));
                     }
 
                     stream.benchmark();
@@ -193,11 +193,13 @@ async function main() {
                     let array = [...source];
                     sw.restart();
                     for (let x = 0; x < chains; x++) {
-                        array = array.filter(() => random.boolean(.9));
+                        array = array.filter(() => random.boolean(.999));
                     }
+                    const asdf = [...array]
 
                     sw.stop();
                     yield sw.elapsedTimeInMilliseconds;
+                    console.error(asdf);
                 }
             })(),
         ];

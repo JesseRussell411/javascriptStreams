@@ -832,10 +832,16 @@ export function shuffle<T>(array: T[]): void {
     }
 }
 
-export function shuffled<T>(collection: Iterable<T>): Iterable<T> {
+export function shuffledToArray<T>(collection: Iterable<T>): T[] {
     const array = [...collection];
     shuffle(array);
     return array;
+}
+
+export function shuffled<T>(collection: Iterable<T>): Iterable<T> {
+    return iter(function* () {
+        yield* shuffledToArray(collection);
+    });
 }
 
 export function range(
@@ -1163,7 +1169,38 @@ export class Random {
         );
     };
 
-    public boolean = (chanceOfTrue: number = 0.5) => this.range(0, 1) < chanceOfTrue;
+    public boolean = (chanceOfTrue: number = 0.5) =>
+        this.range(0, 1) < chanceOfTrue;
+
+    public readonly pickRandom: {
+        /**
+         * @returns A random value from the collection.
+         * @throws If the collection is empty.
+         */
+        <T>(collection: Iterable<T>): T;
+        /**
+         * @returns An Iterable of non-unique random values from the collection. If the original collection is empty, an empty Iterable is returned regardless of the count requested.
+         * @param count How many random values the returned Iterable will have.
+         */
+        <T>(collection: Iterable<T>, count: number | bigint): Iterable<T>;
+    } = <T>(
+        collection: Iterable<T>,
+        count?: number | bigint
+    ): Iterable<T> | T => {
+        if (count === undefined) return random.choice(asSolid(collection));
+
+        const usableCount = BigInt(count);
+        if (usableCount < 0)
+            throw new Error(
+                `count must be 0 or greater but ${count} was given`
+            );
+
+        return iter(function* () {
+            const array = asArray(collection);
+            if (array.length === 0) return;
+            for (let i = 0n; i < usableCount; i++) yield random.choice(array);
+        });
+    };
 }
 
 export const random = new Random();
@@ -1395,4 +1432,32 @@ export function average(numbers: Iterable<number | bigint>): number | bigint {
     }
 }
 
+export function skipRandomToArray<T>(
+    collection: Iterable<T>,
+    count: number | bigint
+): T[] {
+    const usableCount = BigInt(count);
+    if (usableCount < 0n)
+        throw new Error(`count must be 0 or greater but ${count} was given`);
 
+    // TODO find a better way of doing this, there has to be a better way
+    const array = [...collection];
+    for (let i = 0n; i < usableCount && array.length > 0; i++)
+        random.chooseAndRemove(array);
+
+    return array;
+}
+
+export function skipRandom<T>(
+    collection: Iterable<T>,
+    count: number | bigint
+): Iterable<T> {
+    return skipRandomToArray(collection, count);
+}
+
+export function takeRandom<T>(
+    collection: Iterable<T>,
+    count: number | bigint
+): Iterable<T> {
+    return take(shuffled(collection), count);
+}

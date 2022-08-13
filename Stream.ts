@@ -1,4 +1,4 @@
-import { ReadStream } from "fs";
+import { ReadStream, ReadVResult } from "fs";
 import { userInfo } from "os";
 import Stopwatch from "./javascriptStopwatch/stopwatch";
 import getStopwatchClass from "./javascriptStopwatch/stopwatch";
@@ -75,6 +75,10 @@ import {
     IsBigIntLiteral,
     IsStringLiteral,
     concat,
+    skipRandomToArray,
+    take,
+    skipRandom,
+    takeRandom,
 } from "./utils";
 
 /** Properties of a Stream's source. */
@@ -218,7 +222,10 @@ export default class Stream<T> implements Iterable<T> {
         return this;
     }
 
-    /** @returns A Stream of the given mapping from the original Stream. Like {@link Array.map}. */
+    /**
+     * @param mapping The mapping function. Not guarantied to be run for every value in the Stream if not necessary.
+     * @returns A Stream of the given mapping from the original Stream. Like {@link Array.map}.
+     */
     public map<R>(mapping: (value: T, index: number) => R): Stream<R> {
         return new MappedStream(this.getSource, [mapping]);
     }
@@ -227,7 +234,10 @@ export default class Stream<T> implements Iterable<T> {
      * @returns A stream of the values that pass the filter. Like {@link Array.filter}.
      * @param test Whether the given value passes the filter. Return true to include the value in the returned Stream and false to not include it.
      */
-    public filter(test: (value: T, index: number) => boolean): Stream<T> {
+    public filter(
+        test: (value: T, index: number) => boolean
+    ): Stream<T> {
+        // return new Stream(eager(filter(this.getBaseSource(), test)), {});
         return new FilteredStream(this.getSource, [test]);
     }
 
@@ -515,7 +525,7 @@ export default class Stream<T> implements Iterable<T> {
      * @param count How many values to take from the Stream.
      * @returns A Stream of values spread out across the original Stream.
      */
-    public takeSparse(count: number | bigint) {
+    public takeSparse(count: number | bigint): Stream<T> {
         return new Stream(
             eager(takeSparse(this.getBaseSource(), count)),
             this.sourceProperties
@@ -527,7 +537,7 @@ export default class Stream<T> implements Iterable<T> {
      * @param count How many values to skip.
      * @returns A Stream of values spread out across the original Stream.
      */
-    public skipSparse(count: number | bigint) {
+    public skipSparse(count: number | bigint): Stream<T> {
         return new Stream(
             eager(skipSparse(this.getBaseSource(), count)),
             this.sourceProperties
@@ -549,20 +559,8 @@ export default class Stream<T> implements Iterable<T> {
      * Skips a number of random values in the Stream. The values to be skipped are essentially taken without replacement. The same item is never skipped twice.
      */
     public skipRandom(count: number | bigint): Stream<T> {
-        const usableCount = BigInt(count);
-        if (usableCount < 0n)
-            throw new Error(
-                `count must be 0 or greater but ${count} was given`
-            );
         return new Stream(
-            () => {
-                // TODO find a better way of doing this, there has to be a better way
-                const array = this.toArray();
-                for (let i = 0n; i < usableCount && array.length > 0; i++)
-                    random.chooseAndRemove(array);
-
-                return array;
-            },
+            eager(skipRandomToArray(this.getBaseSource(), count)),
             { oneOff: true }
         );
     }
@@ -1359,20 +1357,11 @@ export default class Stream<T> implements Iterable<T> {
     public random(count: number | bigint): Stream<T>;
 
     public random(count?: number | bigint): Stream<T> | T {
-        if (count === undefined) return random.choice(this.asSolid());
-
-        const usableCount = BigInt(count);
-        if (usableCount < 0)
-            throw new Error(
-                `count must be 0 or greater but ${count} was given`
-            );
-
-        const self = this;
-        return Stream.iter(function* () {
-            const array = self.asArray();
-            if (array.length === 0) return;
-            for (let i = 0n; i < usableCount; i++) yield random.choice(array);
-        });
+        if (count === undefined) {
+            return random.pickRandom(this.getBaseSource());
+        } else {
+            return Stream.of(random.pickRandom(this.getBaseSource(), count));
+        }
     }
 
     /** @returns The value at the given index or the value at the given negative index from the end of the Stream (-1 returns the last value, -2 returns the second to last value, etc.).*/
@@ -1608,23 +1597,24 @@ export class OrderedStream<T> extends Stream<T> {
 }
 
 // TODO docs
-export class MappedStream<T, R> extends Stream<R> {
-    private readonly originalGetSource: () => Iterable<T>;
+export class MappedStream<Source, Result> extends Stream<Result> {
+    private readonly originalGetSource: () => Iterable<Source>;
+
     private readonly mappings:
-        | readonly [(value: T, index: number) => R]
+        | readonly [(value: Source, index: number) => Result]
         | readonly [
-              (value: T, index: number) => any,
+              (value: Source, index: number) => any,
               ...((value: any, index: number) => any)[],
-              (value: any, index: number) => R
+              (value: any, index: number) => Result
           ];
     public constructor(
-        getSource: () => Iterable<T>,
+        getSource: () => Iterable<Source>,
         mappings:
-            | readonly [(value: T, index: number) => R]
+            | readonly [(value: Source, index: number) => Result]
             | readonly [
-                  (value: T, index: number) => any,
+                  (value: Source, index: number) => any,
                   ...((value: any, index: number) => any)[],
-                  (value: any, index: number) => R
+                  (value: any, index: number) => Result
               ]
     ) {
         super(() =>
@@ -1639,22 +1629,21 @@ export class MappedStream<T, R> extends Stream<R> {
         this.mappings = mappings;
     }
 
-    // TODO docs
-    public map<NewR>(
-        mapping: (value: R, index: number) => NewR
-    ): MappedStream<T, NewR> {
+    public map<NewResult>(
+        mapping: (value: Result, index: number) => NewResult
+    ): MappedStream<Source, NewResult> {
         return new MappedStream(this.originalGetSource, [
             ...this.mappings,
             mapping,
         ]);
     }
 
-    // TODO docs
-    public at(index: number | bigint): R | undefined {
-        const sourceValue = at(
-            Stream.getBaseSourceOf(this.originalGetSource()),
-            index
-        );
+    private getBaseOfOriginalSource(): Iterable<Source> {
+        return Stream.getBaseSourceOf(this.originalGetSource());
+    }
+
+    public at(index: number | bigint): Result | undefined {
+        const sourceValue = at(this.getBaseOfOriginalSource(), index);
 
         if (sourceValue === undefined) return undefined;
 
@@ -1666,22 +1655,104 @@ export class MappedStream<T, R> extends Stream<R> {
 
         return result;
     }
+
+    public count(): number {
+        return count(this.getBaseOfOriginalSource());
+    }
+
+    public getNonIteratedCountOrUndefined(): number | undefined {
+        return getNonIteratedCountOrUndefined(this.getBaseOfOriginalSource());
+    }
+
+    public takeAlternating(
+        interval: number | bigint = 2n
+    ): MappedStream<Source, Result> {
+        return new MappedStream(
+            eager(takeAlternating(this.getBaseOfOriginalSource(), interval)),
+            this.mappings
+        );
+    }
+
+    public skipAlternating(
+        interval: number | bigint = 2n
+    ): MappedStream<Source, Result> {
+        return new MappedStream(
+            eager(skipAlternating(this.getBaseOfOriginalSource(), interval)),
+            this.mappings
+        );
+    }
+
+    public takeSparse(count: number | bigint): MappedStream<Source, Result> {
+        return new MappedStream(
+            eager(takeSparse(this.getBaseOfOriginalSource(), count)),
+            this.mappings
+        );
+    }
+
+    public skipSparse(count: number | bigint): MappedStream<Source, Result> {
+        return new MappedStream(
+            eager(skipSparse(this.getBaseOfOriginalSource(), count)),
+            this.mappings
+        );
+    }
+
+    public takeRandom(count: number | bigint): MappedStream<Source, Result> {
+        return new MappedStream(
+            eager(takeRandom(this.getBaseOfOriginalSource(), count)),
+            this.mappings
+        );
+    }
+
+    public skipRandom(count: number | bigint): MappedStream<Source, Result> {
+        return new MappedStream(
+            eager(skipRandom(this.getBaseOfOriginalSource(), count)),
+            this.mappings
+        );
+    }
+
+    /**
+     * @returns A random value from the Stream.
+     * @throws If the Stream is empty.
+     */
+    public random(): Result;
+
+    /**
+     * @returns A Stream of non-unique random values from the original Stream. If the original Stream is empty, an empty Stream is returned regardless of the count requested.
+     * @param count How many random values the returned Stream will have.
+     */
+    public random(count: number | bigint): MappedStream<Source, Result>;
+
+    public random(
+        count?: number | bigint
+    ): MappedStream<Source, Result> | Result {
+        if (count === undefined) {
+            return random.pickRandom(this.getBaseSource());
+        } else {
+            return new MappedStream<Source, Result>(
+                eager(random.pickRandom(this.getBaseOfOriginalSource(), count)),
+                this.mappings
+            );
+        }
+    }
 }
 
 // TODO docs
-class FilteredStream<S, R extends S = S> extends Stream<R> {
-    protected readonly originalGetSource: () => Iterable<S>;
+class FilteredStream<
+    Source,
+    Result extends Source = Source
+> extends Stream<Result> {
+    protected readonly originalGetSource: () => Iterable<Source>;
     protected readonly filters: readonly ((
-        value: S,
+        value: Source,
         index: number
     ) => boolean)[];
 
     public constructor(
-        getSource: () => Iterable<S>,
-        filters: readonly ((value: S, index: number) => boolean)[]
+        getSource: () => Iterable<Source>,
+        filters: readonly ((value: Source, index: number) => boolean)[]
     ) {
         super(() => {
-            return filter<S, R>(
+            return filter<Source, Result>(
                 Stream.getBaseSourceOf(getSource()),
                 (value, index) => {
                     for (let i = 0; i < filters.length; i++)
@@ -1694,10 +1765,10 @@ class FilteredStream<S, R extends S = S> extends Stream<R> {
         this.filters = filters;
     }
 
-    public filter<NewR extends R = R>(
-        test: (value: R, index: number) => boolean
-    ): FilteredStream<S, NewR> {
-        return new FilteredStream<S, NewR>(this.originalGetSource, [
+    public filter<NewR extends Result = Result>(
+        test: (value: Result, index: number) => boolean
+    ): FilteredStream<Source, NewR> {
+        return new FilteredStream<Source, NewR>(this.originalGetSource, [
             ...this.filters,
             test,
         ] as any);
