@@ -549,11 +549,8 @@ export type KeySelector<T, K> = (value: T) => K;
 export type Order<T> = KeySelector<T, any> | Comparator<T>;
 
 export function reverseOrder<T>(order: Order<T>): Comparator<T> {
-    if (orderIsComparator(order)) {
-        return (a, b) => order(b, a);
-    } else {
-        return (a, b) => keySelectorToComparator(order)(b, a);
-    }
+    const comparator = orderAsComparator(order);
+    return (a, b) => comparator(b, a);
 }
 
 export function orderAsComparator<T>(
@@ -658,18 +655,18 @@ export function equalLengthZipperMerge<A, B>(
     });
 }
 
-export function merge<A, B>(
+export function looseMerge<A, B>(
     a: Iterable<A>,
     b: Iterable<B>
 ): [A | undefined, B | undefined];
 
-export function merge<A, B, R>(
+export function looseMerge<A, B, R>(
     a: Iterable<A>,
     b: Iterable<B>,
     merger: (a: A | undefined, b: B | undefined) => R
 ): Iterable<R>;
 
-export function merge<A, B>(
+export function looseMerge<A, B>(
     a: Iterable<A>,
     b: Iterable<B>,
     merger: (a: A | undefined, b: B | undefined) => any = (a, b) => [a, b]
@@ -686,18 +683,15 @@ export function merge<A, B>(
     });
 }
 
-export function equalMerge<A, B>(
-    a: Iterable<A>,
-    b: Iterable<B>
-): Iterable<[A, B]>;
+export function merge<A, B>(a: Iterable<A>, b: Iterable<B>): Iterable<[A, B]>;
 
-export function equalMerge<A, B, R>(
+export function merge<A, B, R>(
     a: Iterable<A>,
     b: Iterable<B>,
     merger: (a: A, b: B) => R
 ): Iterable<R>;
 
-export function equalMerge<A, B>(
+export function merge<A, B>(
     a: Iterable<A>,
     b: Iterable<B>,
     merger: (a: A, b: B) => any = (a, b) => [a, b]
@@ -1137,6 +1131,12 @@ export function getNonIteratedCount(
 
 export class Random {
     // one day, I'll add a seed parameter to this class.
+    /**
+     * @returns A number between the lower and upper bounds.
+     *
+     * @param lowerBound Smallest possible value (inclusive).
+     * @param upperBound Largest possible value (exclusive).
+     */
     public range = (
         lowerBound: number | bigint,
         upperBound: number | bigint
@@ -1146,6 +1146,12 @@ export class Random {
         return Math.random() * (max - min) + min;
     };
 
+    /**
+     * @returns A whole number between the lower and upper bounds.
+     *
+     * @param lowerBound Smallest possible value (inclusive).
+     * @param upperBound Largest possible value (exclusive).
+     */
     public int = (
         lowerBound: number | bigint,
         upperBound: number | bigint

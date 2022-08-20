@@ -68,8 +68,8 @@ import {
     lastOrDefault,
     empty,
     indexOf,
-    merge as looseMerge,
-    equalMerge,
+    looseMerge as looseMerge,
+    merge,
     lazyCacheIterable,
     IsNumberLiteral,
     IsBigIntLiteral,
@@ -830,7 +830,7 @@ export default class Stream<T> implements Iterable<T> {
         other: Iterable<O>,
         merger: (t: T, o: O) => any = (t, o) => [t, o]
     ): Stream<any> {
-        return new Stream(eager(equalMerge(this, other, merger)), {
+        return new Stream(eager(merge(this, other, merger)), {
             immutable:
                 this.sourceProperties.immutable &&
                 other instanceof Stream &&
@@ -1727,28 +1727,23 @@ export class MappedStream<Source, Result> extends Stream<Result> {
         );
     }
 
-    /**
-     * @returns A random value from the Stream.
-     * @throws If the Stream is empty.
-     */
     public random(): Result;
 
-    /**
-     * @returns A Stream of non-unique random values from the original Stream. If the original Stream is empty, an empty Stream is returned regardless of the count requested.
-     * @param count How many random values the returned Stream will have.
-     */
-    public random(count: number | bigint): MappedStream<Source, Result>;
+    public random(count: number | bigint): Stream<Result>;
 
-    public random(
-        count?: number | bigint
-    ): MappedStream<Source, Result> | Result {
+    public random(count?: number | bigint): Stream<Result> | Result {
         if (count === undefined) {
-            return random.pickRandom(this.getBaseSource());
+            const array = asArray(this.originalGetSource());
+            const index = random.int(0, array.length);
+            const sourceValue = array[index]!;
+
+            let result: any = this.mappings[0](sourceValue, index);
+            for (let i = 1; i < this.mappings.length; i++)
+                result = this.mappings[i]!(result, index);
+
+            return result;
         } else {
-            return new MappedStream<Source, Result>(
-                eager(random.pickRandom(this.getBaseOfOriginalSource(), count)),
-                this.mappings
-            );
+            return super.random(count);
         }
     }
 }
