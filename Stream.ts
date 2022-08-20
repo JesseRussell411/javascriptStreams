@@ -1660,11 +1660,13 @@ export class MappedStream<Source, Result> extends Stream<Result> {
     }
 
     public at(index: number | bigint): Result | undefined {
-        const sourceValue = at(this.getBaseOfOriginalSource(), index);
-
-        if (sourceValue === undefined) return undefined;
-
         const indexAsNumber = Number(index);
+        
+        if (indexAsNumber < 0) return undefined;
+        const array = asArray(this.originalGetSource());
+        if (indexAsNumber >= array.length) return undefined;
+
+        const sourceValue = array[indexAsNumber]!;
 
         let result: any = this.mappings[0](sourceValue, indexAsNumber);
         for (let i = 1; i < this.mappings.length; i++)
