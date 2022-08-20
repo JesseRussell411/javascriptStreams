@@ -1402,6 +1402,58 @@ export function reduce<T>(
     return result;
 }
 
+export type ReduceAndFinalizeInfo = {
+    readonly count: number;
+};
+
+export function reduceAndFinalize<T, F>(
+    collection: Iterable<T>,
+    reduction: (
+        previousResult: DeLiteral<T>,
+        current: T,
+        index: number
+    ) => DeLiteral<T>,
+    finalize: (result: DeLiteral<T>, info: ReduceAndFinalizeInfo) => F
+): F;
+
+export function reduceAndFinalize<T, R, F>(
+    collection: Iterable<T>,
+    reduction: (previousResult: R, current: T, index: number) => R,
+    finalize: (result: R, info: ReduceAndFinalizeInfo) => F,
+    initialValue: R
+): F;
+
+export function reduceAndFinalize<T, F>(
+    collection: Iterable<T>,
+    reduction: (previousResult: any, current: T, index: number) => any,
+    finalize: (result: any, info: ReduceAndFinalizeInfo) => F,
+    initialValue?: any
+) {
+    if (arguments.length > 3) {
+        let count = 0;
+
+        const reduced = reduce(
+            collection,
+            (...args) => {
+                count++;
+                return reduction(...args);
+            },
+            initialValue
+        );
+
+        return finalize(reduced, { count });
+    } else {
+        let count = 1;
+
+        const reduced = reduce(collection, (...args) => {
+            count++;
+            return reduction(...args);
+        });
+
+        return finalize(reduced, { count });
+    }
+}
+
 export function average(numbers: Iterable<number | bigint>): number | bigint {
     let adder = (a: number | bigint, b: number | bigint): number | bigint => {
         if (typeof a === "bigint" && typeof b === "bigint") {

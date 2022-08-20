@@ -161,6 +161,14 @@ async function main() {
         .reduce((p, c) => p + c);
     console.log(dotProduct);
 
+    console.log(
+        vect1.reduceAndFinalize(
+            (prev, current) => prev + current,
+            (r, info) => r / info.count,
+            0
+        )
+    );
+
     // console.log(nandb.asArray());
 
     // console.log(inspect(customers.groupJoin(customers, c => c.first_name, oc => oc.first_name, ())))

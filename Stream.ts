@@ -81,6 +81,9 @@ import {
     takeRandom,
     forEach,
     BreakSignal,
+    ReduceAndFinalizeInfo,
+    reduce,
+    reduceAndFinalize,
 } from "./utils";
 
 /** Properties of a Stream's source. */
@@ -253,7 +256,7 @@ export default class Stream<T> implements Iterable<T> {
     }
 
     /**
-     * Filters the stream to values that aren't the specified type. Use {@link TypeFilteredOutStream.and} to add more constraints.
+     * Filters the stream to values that aren't of the specified type. Use {@link TypeFilteredOutStream.and} to add more constraints.
      */
     public filterOut<Option extends TypeFilterOption>(
         option: Option
@@ -884,7 +887,7 @@ export default class Stream<T> implements Iterable<T> {
         ) as any;
     }
 
-    /** Does the same thing as {@link Array.copyWithin} but it doesn't modify the original source. */
+    /** Does the same thing as {@link Array.copyWithin} but of course it doesn't modify the original source. */
     public copyWithin(
         target: number | bigint,
         start: number | bigint,
@@ -1161,27 +1164,43 @@ export default class Stream<T> implements Iterable<T> {
         reduction: (previousResult: any, current: T, index: number) => any,
         initialValue?: any
     ): any {
-        const iterator = this[Symbol.iterator]();
-        let next;
-        let result;
-        let index: number;
-
         if (arguments.length > 1) {
-            result = initialValue;
-            index = 0;
+            return reduce(this.getBaseSource(), reduction, initialValue);
         } else {
-            next = iterator.next();
-            if (next.done)
-                throw new Error("reduce of empty Stream with no initial value");
-            result = next.value;
-            index = 1;
+            return reduce(this.getBaseSource(), reduction);
         }
+    }
 
-        while (!(next = iterator.next()).done) {
-            result = reduction(result, next.value, index);
+    public reduceAndFinalize<F>(
+        reduction: (
+            previousResult: DeLiteral<T>,
+            current: T,
+            index: number
+        ) => DeLiteral<T>,
+        finalize: (result: DeLiteral<T>, info: ReduceAndFinalizeInfo) => F
+    ): F;
+
+    public reduceAndFinalize<R, F>(
+        reduction: (previousResult: R, current: T, index: number) => R,
+        finalize: (result: R, info: ReduceAndFinalizeInfo) => F,
+        initialValue: R
+    ): F;
+
+    public reduceAndFinalize<F>(
+        reduction: (previousResult: any, current: T, index: number) => any,
+        finalize: (result: any, info: ReduceAndFinalizeInfo) => F,
+        initialValue?: any
+    ) {
+        if (arguments.length > 3) {
+            return reduceAndFinalize(
+                this.getBaseSource(),
+                reduction,
+                finalize,
+                initialValue
+            );
+        } else {
+            return reduceAndFinalize(this.getBaseSource(), reduction, finalize);
         }
-
-        return result;
     }
 
     /** @returns Whether the stream contains the given value. */
