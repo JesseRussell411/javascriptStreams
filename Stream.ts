@@ -79,6 +79,8 @@ import {
     take,
     skipRandom,
     takeRandom,
+    forEach,
+    BreakSignal,
 } from "./utils";
 
 /** Properties of a Stream's source. */
@@ -213,12 +215,10 @@ export default class Stream<T> implements Iterable<T> {
      * @param callback What to call for each value. If {@link breakSignal} is returned, iteration is stopped.
      * @returns The Stream.
      */
-    public forEach(callback: (value: T, index: number) => Symbol | void): this {
-        let index = 0;
-        for (const value of this) {
-            if (callback(value, index++) === breakSignal) break;
-        }
-
+    public forEach(
+        callback: (value: T, index: number) => BreakSignal | void
+    ): this {
+        forEach(this.getBaseSource(), callback);
         return this;
     }
 
@@ -234,9 +234,7 @@ export default class Stream<T> implements Iterable<T> {
      * @returns A stream of the values that pass the filter. Like {@link Array.filter}.
      * @param test Whether the given value passes the filter. Return true to include the value in the returned Stream and false to not include it.
      */
-    public filter(
-        test: (value: T, index: number) => boolean
-    ): Stream<T> {
+    public filter(test: (value: T, index: number) => boolean): Stream<T> {
         // return new Stream(eager(filter(this.getBaseSource(), test)), {});
         return new FilteredStream(this.getSource, [test]);
     }

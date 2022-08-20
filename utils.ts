@@ -124,6 +124,28 @@ export function filter<T>(
     }
 }
 
+export type BreakSignal = Symbol;
+/** Signal for breaking out of a loop. */
+export const breakSignal: BreakSignal = Symbol("break signal");
+
+export function forEach<T>(
+    collection: Iterable<T>,
+    callback: (value: T, index: number) => BreakSignal | void
+): void {
+    if (isArray(collection)) {
+        let index = 0;
+        // take advantage of faster iteration if possible
+        for (let i = 0; i < collection.length; i++) {
+            if (callback(collection[i]!, index++) === breakSignal) break;
+        }
+    } else {
+        let index = 0;
+        for (const value of collection) {
+            if (callback(value, index++) === breakSignal) break;
+        }
+    }
+}
+
 export function concat<A, B>(a: Iterable<A>, b: Iterable<B>): Iterable<A | B> {
     return iter(function* () {
         yield* a;
@@ -229,19 +251,6 @@ export function join(
         result.push(next.value);
     }
     return result.join("");
-}
-
-/** Signal for breaking out of a loop. */
-export const breakSignal = Symbol("break signal");
-
-export function forEach<T>(
-    collection: Iterable<T>,
-    callback: (value: T, index: number) => Symbol | void
-): void {
-    let index = 0;
-    for (const value of collection) {
-        if (callback(value, index++) === breakSignal) break;
-    }
 }
 
 /** Adds the key and value to the map and the returns the value */

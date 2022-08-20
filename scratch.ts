@@ -17,7 +17,6 @@ import Stopwatch from "./javascriptStopwatch/stopwatch";
 async function main() {
     const customers = Stream.of(await getTestData());
     const products = (() => {
-        let id = 1;
         const productNames = [
             "power blaster 9000",
             "super scoot",
@@ -52,6 +51,7 @@ async function main() {
             "nuclear lip balm",
             "quarter master",
         ];
+        let id = 1;
         return Stream.generate(
             () => ({
                 name: random.chooseAndRemove(productNames),
@@ -59,8 +59,8 @@ async function main() {
                 id: id++,
             }),
             productNames.length
-        ).lazySolidify();
-    })();
+        );
+    })().lazySolidify();
 
     const purchases = Stream.generate(
         () => ({
@@ -160,52 +160,6 @@ async function main() {
         .merge(vect2, (a, b) => a * b)
         .reduce((p, c) => p + c);
     console.log(dotProduct);
-
-    const iterations = 4;
-    const chains = 20000;
-    const source = range(100000);
-
-    for (let j = 0; j < 10; j++) {
-        const streamTimes = [
-            ...(function* () {
-                for (let i = 0; i < iterations; i++) {
-                    const sw = new Stopwatch();
-                    let stream = Stream.of([...source]);
-                    sw.restart();
-
-                    for (let x = 0; x < chains; x++) {
-                        stream = stream.filter(() => random.boolean(.999));
-                    }
-
-                    stream.benchmark();
-                    sw.stop();
-                    yield sw.elapsedTimeInMilliseconds;
-                }
-            })(),
-        ];
-        console.log("stream:", average(streamTimes));
-
-        const stuff: any[] = [];
-        const arrayTimes = [
-            ...(function* () {
-                for (let i = 0; i < iterations; i++) {
-                    const sw = new Stopwatch();
-                    let array = [...source];
-                    sw.restart();
-                    for (let x = 0; x < chains; x++) {
-                        array = array.filter(() => random.boolean(.999));
-                    }
-                    const asdf = [...array]
-
-                    sw.stop();
-                    yield sw.elapsedTimeInMilliseconds;
-                    console.error(asdf);
-                }
-            })(),
-        ];
-
-        console.log(" array:", average(arrayTimes));
-    }
 
     // console.log(nandb.asArray());
 
