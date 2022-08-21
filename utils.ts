@@ -406,8 +406,8 @@ export type DigitCharacter =
     | "7"
     | "8"
     | "9";
-export type BigIntCharacter = DigitCharacter | "-";
-export type NumberCharacter = BigIntCharacter | ".";
+export type IntCharacter = DigitCharacter | "-";
+export type NumberCharacter = IntCharacter | ".";
 export type WhitespaceCharacter = " " | "\n" | "\t" | "\r" | "\v" | "\f";
 export type IsWhitespaceOnly<T> = T extends WhitespaceCharacter
     ? true
@@ -428,7 +428,7 @@ export type IsNumberLiteral<T> = T extends number
     : false;
 
 export type IsBigIntLiteral<T> = T extends bigint
-    ? `${T}` extends `${NumberCharacter}${infer _}`
+    ? `${T}` extends `${IntCharacter}${infer _}`
         ? true
         : false
     : false;
@@ -444,8 +444,7 @@ export type IsLiteral<T> = IsStringLiteral<T> extends true
 export function asNumber(
     value: boolean | number | bigint | null | undefined
 ): number {
-    if (typeof value === "boolean") return value ? 1 : 0;
-    if (value == null) return 0;
+    if (value === undefined) return 0;
     return Number(value);
 }
 

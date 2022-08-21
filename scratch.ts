@@ -197,5 +197,8 @@ async function main() {
     console.log(total);
     console.log(typeof total);
 
+    
+    
+    
 }
 main().catch(e => console.error(e));

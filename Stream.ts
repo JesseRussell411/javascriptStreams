@@ -1,5 +1,6 @@
 import { ReadStream, ReadVResult } from "fs";
 import { userInfo } from "os";
+import { runInThisContext } from "vm";
 import Stopwatch from "./javascriptStopwatch/stopwatch";
 import getStopwatchClass from "./javascriptStopwatch/stopwatch";
 import { and, or } from "./logic";
@@ -1534,6 +1535,10 @@ export default class Stream<T> implements Iterable<T> {
         return this.asArray();
     }
 }
+
+// ====================================================
+//                  child classes
+// ====================================================
 
 /**
  * A {@link Stream} ordered by a collection of Comparators. Use {@link OrderedStream.thenBy} to add more comparators to sort by.
