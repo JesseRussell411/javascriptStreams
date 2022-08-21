@@ -187,5 +187,14 @@ async function main() {
     // console.log(b.asArray());
     // arr[2] = 1999999;
     // console.log(b.asArray());
+
+    sw.reset();
+
+    const testStream = Stream.range(1000000n);
+
+    const total = testStream.reduce((p, c) => p + c);
+    console.log(total);
+    console.log(typeof total);
+
 }
 main().catch(e => console.error(e));

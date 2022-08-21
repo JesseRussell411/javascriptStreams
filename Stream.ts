@@ -1661,7 +1661,7 @@ export class MappedStream<Source, Result> extends Stream<Result> {
 
     public at(index: number | bigint): Result | undefined {
         const indexAsNumber = Number(index);
-        
+
         if (indexAsNumber < 0) return undefined;
         const array = asArray(this.originalGetSource());
         if (indexAsNumber >= array.length) return undefined;

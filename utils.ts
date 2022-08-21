@@ -1386,26 +1386,53 @@ export function reduce<T>(
     initialValue?: any
 ): any {
     const iterator = collection[Symbol.iterator]();
-    let next;
-    let result;
-    let index: number;
 
-    if (arguments.length > 2) {
-        result = initialValue;
-        index = 0;
+    // use faster c-style array iteration if possible
+    if (isArray(collection)) {
+        let i = 0;
+        let result: any;
+
+        // get initial value
+        if (arguments.length > 2) {
+            result = initialValue;
+        } else {
+            if (collection.length === 0)
+                throw new Error("reduce of empty Iterable with no initial value");
+            
+            result = collection[0]!;
+            i++;
+        }
+
+        // iterate the rest of the array
+        for(;i < collection.length; i++){
+            result = reduction(result, collection[i]!, i);
+        }
+
+        return result;
     } else {
-        next = iterator.next();
-        if (next.done)
-            throw new Error("reduce of empty Stream with no initial value");
-        result = next.value;
-        index = 1;
-    }
+        let next: IteratorResult<T>;
+        let result: any;
+        let index: number;
 
-    while (!(next = iterator.next()).done) {
-        result = reduction(result, next.value, index);
-    }
+        // get the initial value
+        if (arguments.length > 2) {
+            result = initialValue;
+            index = 0;
+        } else {
+            next = iterator.next();
+            if (next.done)
+                throw new Error("reduce of empty Iterable with no initial value");
+            result = next.value;
+            index = 1;
+        }
 
-    return result;
+        // iterate the rest of the array
+        while (!(next = iterator.next()).done) {
+            result = reduction(result, next.value, index);
+        }
+
+        return result;
+    }
 }
 
 export type ReduceAndFinalizeInfo = {
