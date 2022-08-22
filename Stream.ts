@@ -1506,24 +1506,26 @@ export default class Stream<T> implements Iterable<T> {
     public benchmark(
         takeTime?: (timeInMilliseconds: number) => void
     ): Stream<T> | number {
-        const stopwatch = new Stopwatch();
-
         if (takeTime === undefined) {
+            const stopwatch = new Stopwatch();
+
             stopwatch.restart();
-            this.solidify();
+            for (const _ of this);
             stopwatch.stop();
+
             return stopwatch.elapsedTimeInMilliseconds;
         } else {
-            return new Stream(
-                () => {
-                    stopwatch.restart();
-                    const result = this.solidify();
-                    stopwatch.stop();
-                    takeTime(stopwatch.elapsedTimeInMilliseconds);
-                    return result.getSource();
-                },
-                { immutable: this.sourceProperties.immutable }
-            );
+            return new Stream(() => {
+                const stopwatch = new Stopwatch();
+
+                stopwatch.restart();
+                const result = [...this];
+                stopwatch.stop();
+
+                takeTime(stopwatch.elapsedTimeInMilliseconds);
+
+                return result;
+            }, this.sourceProperties);
         }
     }
 

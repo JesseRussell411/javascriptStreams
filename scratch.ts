@@ -133,15 +133,7 @@ async function main() {
         { b: 7 },
         Symbol(),
         "\n   ",
-    ] as const)
-        .filterOut("emptyString")
-        .and("number")
-        .and("bigint")
-        .and("0")
-        .and("string")
-        .and("0n")
-        .and("undefined")
-        .skip(0);
+    ] as const).filterOut("undefined").and("null").skip(0);
 
     const stm = Stream.of([1, 2, 3, 4, 5] as const);
     console.log(
