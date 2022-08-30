@@ -127,18 +127,17 @@ export default class Stream<T> implements Iterable<T> {
     }
 
     /** @return A Stream of the given values. */
-    public static literal<T>(...values: T[]) {
+    public static l<T>(...values: T[]) {
         return new Stream(() => values, { immutable: true });
     }
 
     /** @returns A Stream of the given collection or an empty Stream if undefined is given. */
-    public static of<T>(source: Iterable<T> | undefined) {
-        return new Stream(eager(source ?? []), {});
-    }
-
-    /** @returns A Stream of the collection from the given function. */
-    public static from<T>(sourceGetter: () => Iterable<T>) {
-        return new Stream(sourceGetter, {});
+    public static of<T>(source: Iterable<T> | (() => Iterable<T>) | undefined) {
+        if (typeof source === "function") {
+            return new Stream(source, {});
+        } else {
+            return new Stream(eager(source ?? []), {});
+        }
     }
 
     /** @returns A Stream of the generator from the given function. */
@@ -365,16 +364,19 @@ export default class Stream<T> implements Iterable<T> {
     }
 
     /**
-     * An out-of-place sort of the values in the Stream based on the given comparator. Like {@link Array.sort}.
+     * An out-of-place sort of the values in the Stream based on the given comparator. Like {@link Array.sort}. A better version of this is {@link orderBy}. This method is included simply to emulate {@link Array}'s behavior.
      * @returns A Stream of the original Streams values sorted by the comparator.
      * @params comparator How to sort the values. If omitted, the values are sorted in ascending, ASCII order.
      */
     public sort(comparator?: (a: T, b: T) => number): Stream<T> {
-        return Stream.from(() => {
-            const sorted = this.toArray();
-            sorted.sort(comparator);
-            return sorted;
-        });
+        return new Stream(
+            () => {
+                const sorted = this.toArray();
+                sorted.sort(comparator);
+                return sorted;
+            },
+            { oneOff: true }
+        );
     }
 
     /**
@@ -1525,24 +1527,26 @@ export default class Stream<T> implements Iterable<T> {
         }
     }
     // TODO docs
-    public getIfEmpty<R>(getAlternative: () => Iterable<R>): Stream<T | R> {
+    public ifEmpty<R>(
+        alternative: Iterable<R> | (() => Iterable<R>)
+    ): Stream<T | R> {
         const self = this;
         return Stream.iter(function* () {
             const iter = self[Symbol.iterator]();
             let next = iter.next();
 
             if (next.done) {
-                yield* getAlternative();
+                if (typeof alternative === "function") {
+                    yield* alternative();
+                } else {
+                    yield* alternative;
+                }
             } else {
                 do {
                     yield next.value;
                 } while (!(next = iter.next()).done);
             }
         });
-    }
-    // TODO docs
-    public ifEmpty<R>(alternative: Iterable<R>): Stream<T | R> {
-        return this.getIfEmpty(() => alternative);
     }
     // TODO docs
     public toString() {
@@ -1685,11 +1689,15 @@ export class MappedStream<Source, Result> extends Stream<Result> {
     public at(index: number | bigint): Result | undefined {
         const indexAsNumber = Number(index);
 
-        if (indexAsNumber < 0) return undefined;
-        const array = asArray(this.originalGetSource());
+        const array = asArray(this.getBaseOfOriginalSource());
         if (indexAsNumber >= array.length) return undefined;
+        if (indexAsNumber < 0 && array.length + indexAsNumber < 0)
+            return undefined;
 
-        const sourceValue = array[indexAsNumber]!;
+        const sourceValue =
+            array[
+                indexAsNumber < 0 ? array.length + indexAsNumber : indexAsNumber
+            ]!;
 
         let result: any = this.mappings[0](sourceValue, indexAsNumber);
         for (let i = 1; i < this.mappings.length; i++)
