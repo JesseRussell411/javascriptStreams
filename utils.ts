@@ -459,11 +459,7 @@ export interface SmartCompareOptions {
 }
 
 /** Compares two values in a way that makes more sense than the default of {@link Array.sort}, which just compares by their ascii string values. Unlike {@link Array.sort}'s default comparison, This comparison function compares numbers by returning their difference. */
-export function smartCompare(
-    a: any,
-    b: any,
-    options: SmartCompareOptions = {}
-): number {
+export function smartCompare(a: any, b: any): number {
     function rateType(value: any) {
         if (value === null) return 8;
         if (Array.isArray(value)) return 2;
@@ -524,20 +520,18 @@ export function smartCompare(
 
     // arrays
     if (Array.isArray(a) && Array.isArray(b)) {
-        if (options.compareArrays !== undefined)
-            return options.compareArrays(a, b);
-        else return a.length - b.length;
+        return a.length - b.length;
     }
 
     // objects
     if (
-        options.compareObjects !== undefined &&
         typeof a === "object" &&
         a !== null &&
         typeof b === "object" &&
         b !== null
-    )
-        return options.compareObjects(a, b);
+    ) {
+        return Object.values(a).length - Object.values(b).length;
+    }
 
     // if nothing else fits, then compare by string values.
     return `${a}`.localeCompare(`${b}`);
@@ -1396,14 +1390,16 @@ export function reduce<T>(
             result = initialValue;
         } else {
             if (collection.length === 0)
-                throw new Error("reduce of empty Iterable with no initial value");
-            
+                throw new Error(
+                    "reduce of empty Iterable with no initial value"
+                );
+
             result = collection[0]!;
             i++;
         }
 
         // iterate the rest of the array
-        for(;i < collection.length; i++){
+        for (; i < collection.length; i++) {
             result = reduction(result, collection[i]!, i);
         }
 
@@ -1420,7 +1416,9 @@ export function reduce<T>(
         } else {
             next = iterator.next();
             if (next.done)
-                throw new Error("reduce of empty Iterable with no initial value");
+                throw new Error(
+                    "reduce of empty Iterable with no initial value"
+                );
             result = next.value;
             index = 1;
         }
