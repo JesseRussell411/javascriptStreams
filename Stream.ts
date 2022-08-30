@@ -1621,7 +1621,7 @@ export class OrderedStream<T> extends Stream<T> {
             this.orderedBy,
             {},
             eager(this.toArray()),
-            { oneOff: true, immutable: true }
+            { oneOff: false, immutable: true }
         );
     }
 
@@ -1631,7 +1631,7 @@ export class OrderedStream<T> extends Stream<T> {
             this.orderedBy,
             {},
             lazy(() => this.toArray()),
-            { oneOff: true, immutable: true }
+            { oneOff: false, immutable: true }
         );
     }
 }
