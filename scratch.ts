@@ -150,6 +150,7 @@ async function main() {
 
     const dotProduct = vect1
         .merge(vect2, (a, b) => a * b)
+        .ifEmpty([0])
         .reduce((p, c) => p + c);
     console.log(dotProduct);
 
@@ -188,6 +189,8 @@ async function main() {
     const total = testStream.reduce((p, c) => p + c);
     console.log(total);
     console.log(typeof total);
+
+    console.log(Stream.of<number>([]).ifEmpty([673456n]).reduce(() => {throw new Error("ballz")}));
 
     
     

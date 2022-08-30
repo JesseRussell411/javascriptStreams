@@ -1528,11 +1528,31 @@ export default class Stream<T> implements Iterable<T> {
             }, this.sourceProperties);
         }
     }
+    // TODO docs
+    public getIfEmpty<R>(getAlternative: () => Iterable<R>): Stream<T | R> {
+        const self = this;
+        return Stream.iter(function* () {
+            const iter = self[Symbol.iterator]();
+            let next = iter.next();
 
+            if (next.done) {
+                yield* getAlternative();
+            } else {
+                do {
+                    yield next.value;
+                } while (!(next = iter.next()).done);
+            }
+        });
+    }
+    // TODO docs
+    public ifEmpty<R>(alternative: Iterable<R>): Stream<T | R> {
+        return this.getIfEmpty(() => alternative);
+    }
+    // TODO docs
     public toString() {
         return this.join(",");
     }
-
+    // TODO docs
     public toJSON() {
         return this.asArray();
     }
