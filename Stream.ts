@@ -333,7 +333,7 @@ export default class Stream<T> implements Iterable<T> {
         inner: Iterable<I>,
         keySelector: (value: T) => K,
         innerKeySelector: (value: I) => K,
-        resultSelector: (outer: T, inner: Stream<I>) => R
+        resultSelector: (outer: T, inner: I[]) => R
     ): Stream<R> {
         return Stream.of(
             groupJoin(
@@ -341,11 +341,7 @@ export default class Stream<T> implements Iterable<T> {
                 inner,
                 keySelector,
                 innerKeySelector,
-                (inner, outer) =>
-                    resultSelector(
-                        inner,
-                        new Stream(() => outer, { oneOff: true })
-                    )
+                resultSelector
             )
         );
     }

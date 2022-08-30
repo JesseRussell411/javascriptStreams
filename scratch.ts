@@ -80,7 +80,7 @@ async function main() {
             p => p.customerID,
             (customer, purchases) => ({
                 ...customer,
-                purchases: purchases.toArray(),
+                purchases: purchases,
             })
         )
         .benchmark(time => console.log("groupJoin: " + time))
@@ -134,6 +134,11 @@ async function main() {
         Symbol(),
         "\n   ",
     ] as const).filterOut("undefined").and("null").skip(0);
+
+
+    const test = nandb.filterTo("0").and("0n");
+
+    
 
     const stm = Stream.of([1, 2, 3, 4, 5] as const);
     console.log(
@@ -191,6 +196,8 @@ async function main() {
     console.log(typeof total);
 
     console.log(Stream.of<number>([]).ifEmpty([673456n]).reduce(() => {throw new Error("ballz")}));
+
+
 
     
     

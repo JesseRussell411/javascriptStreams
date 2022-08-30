@@ -1008,7 +1008,7 @@ export function groupJoin<O, I, K, R>(
     inner: Iterable<I>,
     outerKeySelector: (value: O) => K,
     innerKeySelector: (value: I) => K,
-    resultSelector: (outer: O, inner: Iterable<I>) => R
+    resultSelector: (outer: O, inner: I[]) => R
 ): Iterable<R> {
     return iter(function* () {
         const innerGrouped = groupBy(inner, innerKeySelector);
