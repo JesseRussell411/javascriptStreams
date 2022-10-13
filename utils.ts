@@ -242,6 +242,7 @@ export function join(
 
     const result: string[] = [];
     const iterator = collection[Symbol.iterator]();
+    
     let next = iterator.next();
     if (next.done) return "";
     result.push(next.value);
@@ -1002,15 +1003,15 @@ export function groupJoin<O, I, K, R>(
     inner: Iterable<I>,
     outerKeySelector: (value: O) => K,
     innerKeySelector: (value: I) => K,
-    resultSelector: (outer: O, inner: I[]) => R
+    resultSelector: (outer: O, inner: StreamableArray<I>) => R
 ): Iterable<R> {
     return iter(function* () {
         const innerGrouped = groupBy(inner, innerKeySelector);
-        let index = 0;
+
         for (const outerValue of outer) {
             const key = outerKeySelector(outerValue);
             const inner = innerGrouped.get(key);
-            yield resultSelector(outerValue, inner ?? []);
+            yield resultSelector(outerValue, inner ?? new StreamableArray<I>);
         }
     });
 }
@@ -1026,15 +1027,16 @@ export function getNonIteratedCountOrUndefined(
 
 export function distinct<T>(
     collection: Iterable<T>,
-    identifier: (value: T) => unknown = value => value
+    identifier?: (value: T) => unknown
 ): Iterable<T> {
-    if (isSet(collection)) return collection;
+    if (identifier == undefined && isSet(collection)) return collection;
+    if (identifier == undefined) identifier = value => value;
 
     return iter(function* () {
         const returned = new Set<unknown>();
 
         for (const value of collection) {
-            const id = identifier(value);
+            const id = identifier!(value);
             if (!returned.has(id)) {
                 returned.add(id);
                 yield value;
@@ -1047,6 +1049,7 @@ export function intersection<T>(a: Iterable<T>, b: Iterable<T>): Iterable<T> {
     return distinct(
         iter(function* () {
             let set: ReadonlySet<T>, iterable: Iterable<T>;
+
             if (isSet(a) && isSet(b)) {
                 if (a.size > b.size) {
                     set = a;

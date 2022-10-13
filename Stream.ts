@@ -651,7 +651,7 @@ export default class Stream<T> implements Iterable<T> {
         const usableAt = BigInt(at);
 
         //TODO add upper bound
-        //TODO insert from end if at is negative
+        //TODO insert from end if it is negative
         if (usableAt < 0n)
             throw new Error(`at must be 0 or greater but ${at} was given`);
         const self = this;
