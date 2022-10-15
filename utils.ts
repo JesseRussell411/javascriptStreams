@@ -1016,13 +1016,36 @@ export function groupJoin<O, I, K, R>(
     });
 }
 
+export function innerJoin<O, I, K, R>(
+    outer: Iterable<O>,
+    inner: Iterable<I>,
+    outerKeySelector: (value: O) => K,
+    innerKeySelector: (value: I) => K,
+    resultSelector: (outer: O, inner: I) => R
+) {
+    return iter(function* () {
+        const innerIndexed = indexBy(inner, innerKeySelector);
+        const returnedKeys = new Set<K>();
+
+        for (const outerValue of outer) {
+            const key = outerKeySelector(outerValue);
+            if (!returnedKeys.has(key) && innerIndexed.has(key)) {
+                yield resultSelector(outerValue, innerIndexed.get(key)!);
+                returnedKeys.add(key);
+            }
+        }
+    });
+}
+
 export function getNonIteratedCountOrUndefined(
     collection: Iterable<any>
 ): number | undefined {
     if (isArray(collection)) return collection.length;
-    if (isSet(collection)) return collection.size;
-    if (collection instanceof Map) return collection.size;
-    return undefined;
+    else if (collection instanceof Set) return collection.size;
+    else if (collection instanceof Map) return collection.size;
+    else if (collection instanceof Stream)
+        return collection.getNonIteratedCountOrUndefined();
+    else return undefined;
 }
 
 export function distinct<T>(
@@ -1199,12 +1222,9 @@ export class Random {
         count?: number | bigint
     ): Iterable<T> | T => {
         if (count === undefined) return random.choice(asSolid(collection));
+        requireInteger(requirePositive(count));
 
         const usableCount = BigInt(count);
-        if (usableCount < 0)
-            throw new Error(
-                `count must be 0 or greater but ${count} was given`
-            );
 
         return iter(function* () {
             const array = asArray(collection);
@@ -1218,7 +1238,7 @@ export const random = new Random();
 
 export function isSolid<T>(
     collection: Iterable<T>
-): collection is Solid<T> | ReadonlySolid<T> {
+): collection is Solid<T> {
     return (
         Array.isArray(collection) ||
         collection instanceof Set ||
@@ -1240,11 +1260,8 @@ export function alternating<T>(
     collection: Iterable<T>,
     interval: number | bigint = 2n
 ): Iterable<T> {
+    requireInteger(requirePositive(interval));
     const usableInterval = BigInt(interval);
-    if (usableInterval < 0)
-        throw new Error(
-            `interval must be 0 or greater but ${interval} was given`
-        );
 
     if (usableInterval === 0n) return empty<T>();
 
@@ -1270,11 +1287,8 @@ export function alternatingSkip<T>(
     collection: Iterable<T>,
     interval: number | bigint = 2n
 ): Iterable<T> {
+    requireInteger(requirePositive(interval));
     const usableInterval = BigInt(interval);
-    if (usableInterval < 0)
-        throw new Error(
-            `interval must be 0 or greater but ${interval} was given`
-        );
 
     if (usableInterval === 0n) return collection;
 
@@ -1287,10 +1301,8 @@ export function alternatingSkip<T>(
 }
 
 export function skipSparse<T>(collection: Iterable<T>, count: number | bigint) {
+    requireInteger(requirePositive(count));
     const usableCount = BigInt(count);
-    if (count < 0)
-        throw new Error(`count must be 0 or greater but ${count} was given`);
-
     if (count === 0) return collection;
 
     const array = [...collection];
@@ -1308,9 +1320,8 @@ export function takeSparse<T>(
     collection: Iterable<T>,
     count: number | bigint
 ): Iterable<T> {
+    requireInteger(requirePositive(count));
     const usableCount = BigInt(count);
-    if (count < 0)
-        throw new Error(`count must be 0 or greater but ${count} was given`);
 
     if (count === 0) return empty<T>();
 
@@ -1530,9 +1541,8 @@ export function skipRandomToArray<T>(
     collection: Iterable<T>,
     count: number | bigint
 ): T[] {
+    requireInteger(requirePositive(count));
     const usableCount = BigInt(count);
-    if (usableCount < 0n)
-        throw new Error(`count must be 0 or greater but ${count} was given`);
 
     // TODO find a better way of doing this, there has to be a better way
     const array = [...collection];
@@ -1554,4 +1564,20 @@ export function takeRandom<T>(
     count: number | bigint
 ): Iterable<T> {
     return take(shuffled(collection), count);
+}
+
+export function requirePositive(num: number | bigint) {
+    if (num < 0) throw new Error(`expected positive number but got ${num}`);
+    else return num;
+}
+
+export function requireNegative(num: number | bigint) {
+    if (num >= 0) throw new Error(`expected negative number but gor ${num}`);
+    else return num;
+}
+
+export function requireInteger(num: number | bigint) {
+    if (typeof num === "bigint") return num;
+    if (num % 1 === 0) return num;
+    throw new Error(`expected integer but got ${num}`);
 }

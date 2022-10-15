@@ -15,7 +15,7 @@ import { inspect } from "util";
 import Stopwatch from "./javascriptStopwatch/stopwatch";
 
 async function main() {
-    const customers = Stream.of(await getTestData());
+    const customers = Stream.from(await getTestData());
     const products = (() => {
         const productNames = [
             "power blaster 9000",
@@ -60,7 +60,7 @@ async function main() {
             }),
             productNames.length
         );
-    })().lazySolidify();
+    })().cached();
 
     const purchases = Stream.generate(
         () => ({
@@ -68,11 +68,12 @@ async function main() {
             product: products.random(),
         }),
         1000
-    ).lazySolidify();
+    ).cached();
 
     const sw = new Stopwatch();
     console.log("start...");
     sw.restart();
+
     const result = customers
         .groupJoin(
             purchases,
@@ -105,7 +106,6 @@ async function main() {
         .map(c => ({ ...c, self_worth: random.range(-10, 10) }))
         .benchmark(time => console.log("map: " + time))
         .distinct(c => "" + c.state)
-
         .takeSparse(10)
         .benchmark(time => console.log("takeSparse: " + time))
         .asArray();
@@ -113,7 +113,7 @@ async function main() {
     const timeToRun = sw.elapsedTimeInMilliseconds;
     // console.log(inspect(result, false, null, true));
     console.log(`Ran query in ${timeToRun} milliseconds.`);
-    const nandb = Stream.of([
+    const nandb = Stream.from([
         1,
         2,
         3,
@@ -133,14 +133,14 @@ async function main() {
         { b: 7 },
         Symbol(),
         "\n   ",
-    ] as const).filterOut("undefined").and("null").skip(0);
-
+    ] as const)
+        .filterOut("undefined")
+        .and("null")
+        .skip(0);
 
     const test = nandb.filterTo("0").and("0n");
 
-    
-
-    const stm = Stream.of([1, 2, 3, 4, 5] as const);
+    const stm = Stream.from([1, 2, 3, 4, 5] as const);
     console.log(
         stm.concat([["a", "b"], ";alksjdf", ["q", "z"]] as const).asArray()
     );
@@ -148,8 +148,8 @@ async function main() {
         stm.concat([["a", "b"], ";alksjdf", ["q", "z"]] as const).asArray()
     );
 
-    const vect1 = Stream.of([1, 2, 3] as const);
-    const vect2 = Stream.of([5, "a", 7, 2, true] as const)
+    const vect1 = Stream.from([1, 2, 3] as const);
+    const vect2 = Stream.from([5, "a", 7, 2, true] as const)
         .filterOut("string")
         .and("boolean");
 
@@ -186,7 +186,6 @@ async function main() {
     // arr[2] = 1999999;
     // console.log(b.asArray());
 
-
     sw.reset();
 
     const testStream = Stream.range(1000000n);
@@ -195,12 +194,27 @@ async function main() {
     console.log(total);
     console.log(typeof total);
 
-    console.log(Stream.of<number>([]).ifEmpty([673456n]).reduce(() => {throw new Error("ballz")}));
+    console.log(
+        Stream.from<number>([])
+            .ifEmpty([673456n])
+            .reduce(() => {
+                throw new Error("ballz");
+            })
+    );
 
-
-
-    
-    
-    
+    // log the top three customers by how much they bought
+    console.log(
+        customers
+            .groupJoin(
+                purchases,
+                c => c.id,
+                p => p.customerID,
+                (c, p) => ({ ...c, purchases: p })
+            )
+            .orderByDescending(c => c.purchases.length)
+            .skip(6)
+            .take(3)
+            .then(s => inspect(s.toArray(), false, null, true))
+    );
 }
 main().catch(e => console.error(e));

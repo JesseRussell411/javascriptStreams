@@ -10,13 +10,13 @@ export type StreamableTuple<T extends readonly any[] | any[]> = T &
 
 export class StreamableArray<T> extends Array<T> implements Streamable<T> {
     public stream(): Stream<T> {
-        return Stream.of(this);
+        return Stream.from(this);
     }
 }
 
 export class StreamableSet<T> extends Set<T> implements Streamable<T> {
     public stream(): Stream<T> {
-        return Stream.of(this);
+        return Stream.from(this);
     }
 }
 
@@ -25,6 +25,6 @@ export class StreamableMap<K, V>
     implements Streamable<[K, V]>
 {
     public stream(): Stream<[K, V]> {
-        return Stream.of(this);
+        return Stream.from(this);
     }
 }
