@@ -10,7 +10,7 @@ async function main() {
         getCustomers(),
         getProducts(),
         getPurchases(),
-    ] as const);
+    ]);
 
     const customers = customerData
         .groupJoin(
