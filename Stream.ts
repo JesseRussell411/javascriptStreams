@@ -100,6 +100,10 @@ export interface StreamSourceProperties<T> {
     readonly count?: number;
 }
 
+export type ValueOfStream<S extends Stream<any>> = S extends Stream<infer T>
+    ? T
+    : never;
+
 // TODO docs
 export default class Stream<T> implements Iterable<T> {
     /** Returns the Source Iterable that the Stream is over. */
@@ -1530,8 +1534,16 @@ export default class Stream<T> implements Iterable<T> {
     /**
      * Calls the given function with the Stream and returns the result.
      */
-    public next<R>(next: (stream: this) => R) {
+    public pipe<R>(next: (stream: this) => R) {
         return next(this);
+    }
+
+    /**
+     * Calls the given function with the Stream and return the Stream.
+     */
+    public inspect(inspector: (stream: this) => void): this {
+        inspector(this);
+        return this;
     }
 
     /**
