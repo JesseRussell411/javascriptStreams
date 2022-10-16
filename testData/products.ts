@@ -41,11 +41,11 @@ const products = Stream.from(productNames)
     .shuffle()
     .map((name, i) => ({
         name,
-        price: Math.round(Math.random() * 30 * 100) / 100,
+        price: BigInt(random.int(0, 1000)),
         id: i + 1,
     }))
     .cache();
 
-export async function getProducts(){
+export async function getProducts() {
     return products;
 }

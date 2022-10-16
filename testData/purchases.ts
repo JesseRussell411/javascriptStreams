@@ -10,9 +10,36 @@ export const getPurchases = lazy(async () => {
         .map(c =>
             Stream.generate(
                 () => ({ customerID: c.id, productID: products.random().id }),
-                random.int(0, 10)
+                random.choice([
+                    () => random.int(0, 4),
+                    () => random.int(5, 8),
+                    () => random.int(5, 16),
+                    () => random.int(10, 21),
+                    () => random.int(0, 4),
+                    () => random.int(5, 8),
+                    () => random.int(5, 16),
+                    () => random.int(10, 21),
+                    () => random.int(0, 4),
+                    () => random.int(5, 8),
+                    () => random.int(5, 16),
+                    () => random.int(10, 21),
+                    () => random.int(0, 4),
+                    () => random.int(5, 8),
+                    () => random.int(5, 16),
+                    () => random.int(10, 21),
+                    () => random.int(0, 4),
+                    () => random.int(5, 8),
+                    () => random.int(5, 16),
+                    () => random.int(10, 21),
+                    () => random.int(0, 4),
+                    () => random.int(5, 8),
+                    () => random.int(5, 16),
+                    () => random.int(10, 21),
+                    () => random.int(100, 103),
+                ])()
             )
         )
+        .cache()
         .flat()
         .cache();
 });
