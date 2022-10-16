@@ -165,9 +165,7 @@ export default class Stream<T> implements Iterable<T> {
         if (typeof source === "function") {
             return new Stream(source, {});
         } else {
-            return new Stream(eager(source ?? []), {
-                count: getNonIteratedCountOrUndefined(source),
-            });
+            return new Stream(eager(source ?? []));
         }
     }
 
@@ -236,7 +234,10 @@ export default class Stream<T> implements Iterable<T> {
         from: (index: number) => T,
         length: number | bigint
     ) {
-        return Stream.from(generate(from, length));
+        requireInteger(requirePositive(length));
+        return new Stream(eager(generate(from, length)), {
+            count: Number(length),
+        });
     }
 
     /** @returns An iterator over the Stream. */
@@ -352,7 +353,7 @@ export default class Stream<T> implements Iterable<T> {
      */
     public groupBy<K>(
         keySelector: (value: T, index: number) => K
-    ): Stream<[K, StreamableArray<T>]>;
+    ): Stream<[K, T[]]>;
     /**
      * Groups the values in the Stream by the given key selector and then applying a mapping to the values using the value selector.
      * @param keySelector Specifies group to put each value in by the key it returns.
@@ -362,11 +363,11 @@ export default class Stream<T> implements Iterable<T> {
     public groupBy<K, V>(
         keySelector: (value: T, index: number) => K,
         valueSelector: (value: T, index: number) => V
-    ): Stream<[K, StreamableArray<V>]>;
+    ): Stream<[K, V[]]>;
     public groupBy<K>(
         keySelector: (value: T, index: number) => K,
         valueSelector: (value: T, index: number) => any = value => value
-    ): Stream<[K, StreamableArray<T>]> {
+    ): Stream<[K, T[]]> {
         return new Stream(
             () => groupBy(this.getSource(), keySelector, valueSelector),
             {
@@ -514,10 +515,9 @@ export default class Stream<T> implements Iterable<T> {
      * @param interval The interval on which to take. Defaults to 2.
      */
     public takeAlternating(interval: number | bigint = 2n): Stream<T> {
-        return new Stream(
-            eager(takeAlternating(this.getSource(), interval)),
-            { immutable: this.sourceProperties.immutable }
-        );
+        return new Stream(eager(takeAlternating(this.getSource(), interval)), {
+            immutable: this.sourceProperties.immutable,
+        });
     }
 
     /**
@@ -525,10 +525,9 @@ export default class Stream<T> implements Iterable<T> {
      * @param interval The interval on which to skip. Defaults to 2.
      */
     public skipAlternating(interval: number | bigint = 2n): Stream<T> {
-        return new Stream(
-            eager(skipAlternating(this.getSource(), interval)),
-            { immutable: this.sourceProperties.immutable }
-        );
+        return new Stream(eager(skipAlternating(this.getSource(), interval)), {
+            immutable: this.sourceProperties.immutable,
+        });
     }
 
     /**
@@ -625,10 +624,9 @@ export default class Stream<T> implements Iterable<T> {
      * Skips a number of random values in the Stream. The values to be skipped are essentially taken without replacement. The same item is never skipped twice.
      */
     public skipRandom(count: number | bigint): Stream<T> {
-        return new Stream(
-            eager(skipRandomToArray(this.getSource(), count)),
-            { oneOff: true }
-        );
+        return new Stream(eager(skipRandomToArray(this.getSource(), count)), {
+            oneOff: true,
+        });
     }
 
     /**
@@ -1532,7 +1530,7 @@ export default class Stream<T> implements Iterable<T> {
     /**
      * Calls the given function with the Stream and returns the result.
      */
-    public then<R>(next: (stream: this) => R) {
+    public next<R>(next: (stream: this) => R) {
         return next(this);
     }
 
@@ -1546,8 +1544,7 @@ export default class Stream<T> implements Iterable<T> {
         checkEquality: (a: T, b: T) => boolean = (a, b) => Object.is(a, b)
     ) {
         const source = this.getSource();
-        const otherSource =
-            other instanceof Stream ? other.getSource() : other;
+        const otherSource = other instanceof Stream ? other.getSource() : other;
 
         {
             const count = getNonIteratedCountOrUndefined(source);
@@ -1794,9 +1791,7 @@ export class MappedStream<Source, Result> extends Stream<Result> {
     }
 
     public count(): number {
-        return (
-            this.sourceProperties.count ?? count(this.originalGetSource())
-        );
+        return this.sourceProperties.count ?? count(this.originalGetSource());
     }
 
     public getNonIteratedCountOrUndefined(): number | undefined {
@@ -1899,14 +1894,11 @@ class FilteredStream<
     ) {
         super(
             () => {
-                return filter<Source, Result>(
-                    getSource(),
-                    (value, index) => {
-                        for (let i = 0; i < filters.length; i++)
-                            if (!filters[i]!(value, index)) return false;
-                        return true;
-                    }
-                );
+                return filter<Source, Result>(getSource(), (value, index) => {
+                    for (let i = 0; i < filters.length; i++)
+                        if (!filters[i]!(value, index)) return false;
+                    return true;
+                });
             },
             { immutable: sourceProperties.immutable }
         );

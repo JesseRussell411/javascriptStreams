@@ -242,7 +242,7 @@ export function join(
 
     const result: string[] = [];
     const iterator = collection[Symbol.iterator]();
-    
+
     let next = iterator.next();
     if (next.done) return "";
     result.push(next.value);
@@ -969,27 +969,25 @@ export function groupBy<T, K, V>(
     collection: Iterable<T>,
     keySelector: (value: T, index: number) => K,
     valueSelector: (value: T, index: number) => V
-): Map<K, StreamableArray<V>>;
+): Map<K, V[]>;
 
 export function groupBy<T, K>(
     collection: Iterable<T>,
     keySelector: (value: T, index: number) => K
-): Map<K, StreamableArray<T>>;
+): Map<K, T[]>;
 
 export function groupBy<T, K>(
     collection: Iterable<T>,
     keySelector: (value: T, index: number) => K,
     valueSelector: (value: T, index: number) => any = value => value
-): Map<K, StreamableArray<any>> {
-    const groups = new Map<K, StreamableArray<any>>();
+): Map<K, any[]> {
+    const groups = new Map<K, any[]>();
 
     let index = 0;
     for (const value of collection) {
         const key = keySelector(value, index);
 
-        const group =
-            groups.get(key) ??
-            setAndGet(groups, key, new StreamableArray<any>());
+        const group = groups.get(key) ?? setAndGet(groups, key, []);
 
         group.push(valueSelector(value, index));
         index++;
@@ -1003,7 +1001,7 @@ export function groupJoin<O, I, K, R>(
     inner: Iterable<I>,
     outerKeySelector: (value: O) => K,
     innerKeySelector: (value: I) => K,
-    resultSelector: (outer: O, inner: StreamableArray<I>) => R
+    resultSelector: (outer: O, inner: I[]) => R
 ): Iterable<R> {
     return iter(function* () {
         const innerGrouped = groupBy(inner, innerKeySelector);
@@ -1011,7 +1009,7 @@ export function groupJoin<O, I, K, R>(
         for (const outerValue of outer) {
             const key = outerKeySelector(outerValue);
             const inner = innerGrouped.get(key);
-            yield resultSelector(outerValue, inner ?? new StreamableArray<I>);
+            yield resultSelector(outerValue, inner ?? []);
         }
     });
 }
@@ -1025,13 +1023,11 @@ export function innerJoin<O, I, K, R>(
 ) {
     return iter(function* () {
         const innerIndexed = indexBy(inner, innerKeySelector);
-        const returnedKeys = new Set<K>();
 
         for (const outerValue of outer) {
             const key = outerKeySelector(outerValue);
-            if (!returnedKeys.has(key) && innerIndexed.has(key)) {
+            if (innerIndexed.has(key)) {
                 yield resultSelector(outerValue, innerIndexed.get(key)!);
-                returnedKeys.add(key);
             }
         }
     });
@@ -1236,9 +1232,7 @@ export class Random {
 
 export const random = new Random();
 
-export function isSolid<T>(
-    collection: Iterable<T>
-): collection is Solid<T> {
+export function isSolid<T>(collection: Iterable<T>): collection is Solid<T> {
     return (
         Array.isArray(collection) ||
         collection instanceof Set ||

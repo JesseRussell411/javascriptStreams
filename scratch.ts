@@ -1,118 +1,56 @@
 import Stream from "./Stream";
+import fs from "fs/promises";
 import { StreamableArray } from "./Streamable";
-import { getTestData } from "./getTestData";
 import {
     average,
     breakSignal,
     DeLiteral,
     distinct,
     isArray,
+    KeyOfArray,
+    lazy,
     random,
     range,
     ValueOfArray,
 } from "./utils";
 import { inspect } from "util";
 import Stopwatch from "./javascriptStopwatch/stopwatch";
+import { getCurves } from "crypto";
+
+import { getCustomers } from "./testData/customers";
+import { getPurchases } from "./testData/purchases";
+import { getProducts } from "./testData/products";
+
+type ResultOfPromise<T extends Promise<any>> = T extends Promise<infer PT>
+    ? PT extends Promise<any>
+        ? ResultOfPromise<PT>
+        : PT
+    : never;
+
+type ResultsOfPromises<T extends readonly [...Promise<any>[]]> = {
+    [K in keyof T]: ResultOfPromise<T[K]>;
+};
+
+async function manyPromises<T extends readonly [...Promise<any>[]]>(
+    many: T
+): Promise<ResultsOfPromises<T>> {
+    const result = [];
+    for (const promise of many) {
+        result.push(await promise);
+    }
+    return result as any;
+}
 
 async function main() {
-    const customers = Stream.from(await getTestData());
-    const products = (() => {
-        const productNames = [
-            "power blaster 9000",
-            "super scoot",
-            "ajax bleach",
-            "just a dead thing",
-            "powerBook",
-            "apple",
-            "orange",
-            "banana mania",
-            "junk master",
-            "message master",
-            "in-fruit-inator",
-            "I can't believe it's butter",
-            "mega string",
-            "mega-mart-express",
-            "sack of hammers",
-            "russian screwdriver",
-            "lip bomb",
-            "ridiculous soaker",
-            "squirt gun",
-            "canadian squirt gun",
-            "turkey baster",
-            "ajax extreme",
-            "powdered milk",
-            "powdered cheese",
-            "gas-cooker",
-            "plant-based burger",
-            "meat-based veggies",
-            "X-treme sunglasses",
-            "rocket scooter",
-            "lip balm",
-            "nuclear lip balm",
-            "quarter master",
-        ];
-        let id = 1;
-        return Stream.generate(
-            () => ({
-                name: random.chooseAndRemove(productNames),
-                price: Math.round(Math.random() * 30 * 100) / 100,
-                id: id++,
-            }),
-            productNames.length
-        );
-    })().cached();
-
-    const purchases = Stream.generate(
-        () => ({
-            customerID: customers.random().id,
-            product: products.random(),
-        }),
-        1000
-    ).cached();
+    const [customers, purchases, products] = await manyPromises([
+        getCustomers(),
+        getPurchases(),
+        getProducts(),
+    ] as const);
 
     const sw = new Stopwatch();
     console.log("start...");
     sw.restart();
-
-    const result = customers
-        .groupJoin(
-            purchases,
-            c => c.id,
-            p => p.customerID,
-            (customer, purchases) => ({
-                ...customer,
-                purchases: purchases,
-            })
-        )
-        .benchmark(time => console.log("groupJoin: " + time))
-
-        .filter(c => c.purchases.length > 1)
-        .filter(c => c.gender === "Male")
-        .benchmark(time => console.log("filter: " + time))
-
-        .orderBy(c => c.purchases.length)
-        .thenBy(c => c.first_name)
-        .thenBy(c => c.last_name)
-        .thenBy(c => c.id)
-
-        // .orderBy(c => c.id)
-        // .orderBy(c => c.last_name)
-        // .orderBy(c => c.first_name)
-        // .orderBy(c => c.purchases.length)
-
-        .benchmark(time => console.log("orderBy: " + time))
-
-        .map(c => ({ ...c, net_worth: random.range(-10, 10) }))
-        .map(c => ({ ...c, self_worth: random.range(-10, 10) }))
-        .benchmark(time => console.log("map: " + time))
-        .distinct(c => "" + c.state)
-        .takeSparse(10)
-        .benchmark(time => console.log("takeSparse: " + time))
-        .asArray();
-
-    const timeToRun = sw.elapsedTimeInMilliseconds;
-    // console.log(inspect(result, false, null, true));
-    console.log(`Ran query in ${timeToRun} milliseconds.`);
     const nandb = Stream.from([
         1,
         2,
@@ -194,27 +132,29 @@ async function main() {
     console.log(total);
     console.log(typeof total);
 
-    console.log(
-        Stream.from<number>([])
-            .ifEmpty([673456n])
-            .reduce(() => {
-                throw new Error("ballz");
+    const result = customers
+        .groupJoin(
+            purchases.innerJoin(
+                products,
+                purchase => purchase.productID,
+                product => product.id,
+                (purchase, product) => ({
+                    customerID: purchase.customerID,
+                    product,
+                })
+            ),
+            c => c.id,
+            p => p.customerID,
+            (customer, purchases) => ({
+                ...customer,
+                purchases: purchases,
             })
-    );
+        )
+        .orderBy(c => c.purchases.length)
+        .map(c => c.purchases)
+        .takeSparse(5)
+        .toArray();
 
-    // log the top three customers by how much they bought
-    console.log(
-        customers
-            .groupJoin(
-                purchases,
-                c => c.id,
-                p => p.customerID,
-                (c, p) => ({ ...c, purchases: p })
-            )
-            .orderByDescending(c => c.purchases.length)
-            .skip(6)
-            .take(3)
-            .then(s => inspect(s.toArray(), false, null, true))
-    );
+    console.log(inspect(result, false, null, true));
 }
 main().catch(e => console.error(e));
