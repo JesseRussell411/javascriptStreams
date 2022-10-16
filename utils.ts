@@ -1579,9 +1579,3 @@ export function requireInteger(num: number | bigint) {
     if (num % 1 === 0) return num;
     throw new Error(`expected integer but got ${num}`);
 }
-
-type Awaited<T extends Promise<any>> = T extends Promise<infer PT>
-    ? PT extends Promise<any>
-        ? Awaited<PT>
-        : PT
-    : never;
