@@ -1022,12 +1022,16 @@ export function innerJoin<O, I, K, R>(
     resultSelector: (outer: O, inner: I) => R
 ) {
     return iter(function* () {
-        const innerIndexed = indexBy(inner, innerKeySelector);
+        // const innerIndexed = indexBy(inner, innerKeySelector);
+        const innerGrouped = groupBy(inner, innerKeySelector);
 
         for (const outerValue of outer) {
             const key = outerKeySelector(outerValue);
-            if (innerIndexed.has(key)) {
-                yield resultSelector(outerValue, innerIndexed.get(key)!);
+            const innerGroup = innerGrouped.get(key);
+            if (innerGroup !== undefined) {
+                for (const innerValue of innerGroup) {
+                    yield resultSelector(outerValue, innerValue);
+                }
             }
         }
     });
@@ -1575,3 +1579,9 @@ export function requireInteger(num: number | bigint) {
     if (num % 1 === 0) return num;
     throw new Error(`expected integer but got ${num}`);
 }
+
+type Awaited<T extends Promise<any>> = T extends Promise<infer PT>
+    ? PT extends Promise<any>
+        ? Awaited<PT>
+        : PT
+    : never;
