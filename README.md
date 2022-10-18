@@ -8,7 +8,7 @@ It can be found here: https://github.com/neuecc/linq.js/ and I would highly reco
 As impressive as Linq.js is, I think my own implementation has at least one advantage and that is the fact that it is written in modern TypeScript, taking advantage of
 modern es6 features.
 
-##examples of usage:
+# examples of usage:
 
 Some basic operations
 ```
@@ -22,7 +22,7 @@ console.log(
     .reduce((total, current) => total + current, 0n));
 ```
 
-#From demo.ts
+## From demo.ts
 
 Joining customers with their purchases
 ```
