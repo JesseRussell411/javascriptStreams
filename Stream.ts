@@ -461,11 +461,9 @@ export default class Stream<T> implements Iterable<T> {
      */
     public orderBy(comparator: Comparator<T>): OrderedStream<T>;
     public orderBy(order: Order<T>): OrderedStream<T> {
-        return new OrderedStream(
-            this.getSource,
-            [order],
-            this.sourceProperties
-        );
+        return new OrderedStream(this.getSource, [order], {
+            count: this.sourceProperties.count,
+        });
     }
 
     /**
@@ -578,6 +576,7 @@ export default class Stream<T> implements Iterable<T> {
      * Takes a number of values from the start of the Stream.
      */
     public take(count: number | bigint): Stream<T> {
+        requireInteger(count);
         const usableCount = Math.trunc(Number(count));
         if (usableCount < 0) return this.reverse().take(-count).reverse();
         if (usableCount === 0) return Stream.empty<T>();
@@ -588,6 +587,7 @@ export default class Stream<T> implements Iterable<T> {
      * Skips a number of values from the start of the Stream.
      */
     public skip(count: number | bigint): Stream<T> {
+        requireInteger(count);
         const usableCount = Math.trunc(Number(count));
         if (usableCount < 0) return this.reverse().skip(-count).reverse();
         if (usableCount === 0) return this;
