@@ -1,5 +1,5 @@
 # javascriptStreams
-My inspiration for this project was obviously Linq from C# (one of my favorite features in C#).
+My inspiration for this project was obviously Linq from C# (one of my favorite features of C#).
 Linq allows the programmer to write SQL-like queries against any class that implements the IEnumerable interface.
 This means that you can interface with virtually any datastructure in C# using a powerful declarative query syntax.
 Unsurprisingly, someone has already written a version of this for Javascript.
