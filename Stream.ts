@@ -90,6 +90,8 @@ import {
     innerJoin,
     split,
     skip,
+    skipWhile,
+    takeWhile,
 } from "./utils";
 
 /** Properties of a Stream's source. */
@@ -538,41 +540,14 @@ export default class Stream<T> implements Iterable<T> {
      * Iterates over the Stream, stopping at the first value to fail the test.
      */
     public takeWhile(test: (value: T, index: number) => boolean) {
-        const self = this;
-        return new Stream(
-            eager(
-                iter(function* () {
-                    let index = 0;
-                    for (const value of self) {
-                        if (!test(value, index++)) break;
-                        yield value;
-                    }
-                })
-            ),
-            { immutable: this.sourceProperties.immutable }
-        );
+        return new Stream(eager(takeWhile(this.getSource(), test)));
     }
 
     /**
      * Iterates over the Stream, starting at the first value to fail the test.
      */
     public skipWhile(test: (value: T, index: number) => boolean) {
-        const self = this;
-        return new Stream(
-            eager(
-                iter(function* () {
-                    let index = 0;
-                    for (const value of self)
-                        if (test(value, index++)) {
-                            yield value;
-                            break;
-                        }
-
-                    yield* self;
-                })
-            ),
-            { immutable: this.sourceProperties.immutable }
-        );
+        return new Stream(eager(skipWhile(this.getSource(), test)));
     }
 
     /**

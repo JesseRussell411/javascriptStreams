@@ -3,6 +3,7 @@ import { and, or } from "./logic";
 import { StreamableArray } from "./Streamable";
 import { toASCII } from "punycode";
 import { isNumberObject } from "util/types";
+import { groupCollapsed } from "console";
 
 /**
  * @returns Returns a function which returns the given value.
@@ -1564,6 +1565,39 @@ export function takeRandom<T>(
     count: number | bigint
 ): Iterable<T> {
     return take(shuffled(collection), count);
+}
+
+export function skipWhile<T>(
+    collection: Iterable<T>,
+    test: (value: T, index: number) => boolean
+) {
+    return iter(function* () {
+        const iter = collection[Symbol.iterator]();
+        let next: IteratorResult<T>;
+        let i = 0;
+        while (!(next = iter.next()).done) {
+            if (!test(next.value, i++)) break;
+        }
+        while (!(next = iter.next()).done) {
+            yield next.value;
+        }
+    });
+}
+
+export function takeWhile<T>(
+    collection: Iterable<T>,
+    test: (value: T, index: number) => boolean
+) {
+    return iter(function* () {
+        let i = 0;
+        for (const value of collection) {
+            if (test(value, i++)) {
+                yield value;
+            } else {
+                break;
+            }
+        }
+    });
 }
 
 export function requirePositive(num: number | bigint) {
