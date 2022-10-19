@@ -1332,6 +1332,7 @@ export function takeSparse<T>(
 }
 
 export function skip<T>(collection: Iterable<T>, count: number | bigint) {
+    requireInteger(requirePositive(count));
     const usableCount = BigInt(count);
     if (usableCount <= 0n) return collection;
 
@@ -1351,8 +1352,9 @@ export function take<T>(
     collection: Iterable<T>,
     count: number | bigint
 ): Iterable<T> {
-    const bigintCount = BigInt(count);
+    requireInteger(count);
     if (count < 0n) return take(reverse(collection), -count);
+    const bigintCount = BigInt(count);
 
     return iter(function* () {
         let i = 0n;
@@ -1578,4 +1580,34 @@ export function requireInteger(num: number | bigint) {
     if (typeof num === "bigint") return num;
     if (num % 1 === 0) return num;
     throw new Error(`expected integer but got ${num}`);
+}
+
+export function split<T>(
+    collection: Iterable<T>,
+    deliminator: Iterable<any>
+): Iterable<T[]> {
+    return iter(function* () {
+        const delim = asArray(deliminator);
+        let chunk: T[] = [];
+        let i = 0;
+        for (const value of collection) {
+            if (Object.is(value, delim[i])) {
+                i++;
+            } else {
+                i = 0;
+            }
+
+            if (i === delim.length) {
+                // remove delim from chunk
+                chunk.splice(chunk.length - delim.length + 1, delim.length - 1);
+
+                yield chunk;
+                chunk = [];
+                i = 0;
+            } else {
+                chunk.push(value);
+            }
+        }
+        yield chunk;
+    });
 }

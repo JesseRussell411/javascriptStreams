@@ -11,6 +11,7 @@ import {
     lazy,
     random,
     range,
+    split,
     ValueOfArray,
 } from "./utils";
 import { inspect } from "util";
@@ -156,5 +157,11 @@ async function main() {
         .toArray();
 
     console.log(inspect(result, false, null, true));
+
+
+    console.log(Stream.from(",,1,,5,82,,,3,,4,,5,,").skip(3).map(c => {
+        console.log(c);
+        return c;
+    }).split(",,").skip(2).take(2).asArray());
 }
 main().catch(e => console.error(e));

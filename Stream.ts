@@ -88,6 +88,8 @@ import {
     requireInteger,
     requirePositive,
     innerJoin,
+    split,
+    skip,
 } from "./utils";
 
 /** Properties of a Stream's source. */
@@ -538,14 +540,15 @@ export default class Stream<T> implements Iterable<T> {
     public takeWhile(test: (value: T, index: number) => boolean) {
         const self = this;
         return new Stream(
-            () =>
+            eager(
                 iter(function* () {
                     let index = 0;
                     for (const value of self) {
                         if (!test(value, index++)) break;
                         yield value;
                     }
-                }),
+                })
+            ),
             { immutable: this.sourceProperties.immutable }
         );
     }
@@ -576,22 +579,18 @@ export default class Stream<T> implements Iterable<T> {
      * Takes a number of values from the start of the Stream.
      */
     public take(count: number | bigint): Stream<T> {
-        requireInteger(count);
-        const usableCount = Math.trunc(Number(count));
-        if (usableCount < 0) return this.reverse().take(-count).reverse();
-        if (usableCount === 0) return Stream.empty<T>();
-        return this.takeWhile((_, index) => index < usableCount);
+        return new Stream(eager(take(this.getSource(), count)), {
+            immutable: this.sourceProperties.immutable,
+        });
     }
 
     /**
      * Skips a number of values from the start of the Stream.
      */
     public skip(count: number | bigint): Stream<T> {
-        requireInteger(count);
-        const usableCount = Math.trunc(Number(count));
-        if (usableCount < 0) return this.reverse().skip(-count).reverse();
-        if (usableCount === 0) return this;
-        return this.skipWhile((_, index) => index < usableCount);
+        return new Stream(eager(skip(this.getSource(), count)), {
+            immutable: this.sourceProperties.immutable,
+        });
     }
 
     /**
@@ -999,6 +998,17 @@ export default class Stream<T> implements Iterable<T> {
             },
             { oneOff: true, immutable: this.sourceProperties.immutable }
         );
+    }
+
+    // TODO docs
+    public split(deliminator: Iterable<any>): Stream<T[]> {
+        return new Stream(eager(split(this, deliminator)), {
+            immutable:
+                (this.sourceProperties.immutable &&
+                    typeof deliminator === "string") ||
+                (deliminator instanceof Stream &&
+                    deliminator.sourceProperties.immutable),
+        });
     }
 
     /**
@@ -1863,6 +1873,14 @@ export class MappedStream<Source, Result> extends Stream<Result> {
         requireInteger(requirePositive(count));
         return new MappedStream(
             eager(skipRandom(this.originalGetSource(), count)),
+            this.mappings
+        );
+    }
+
+    public skip(count: number | bigint): MappedStream<Source, Result> {
+        requireInteger(requirePositive(count));
+        return new MappedStream(
+            eager(skip(this.originalGetSource(), count)),
             this.mappings
         );
     }
