@@ -1,4 +1,4 @@
-import Stream from "./Stream";
+import Stream, { isStream } from "./Stream";
 import { and, or } from "./logic";
 import { StreamableArray } from "./Streamable";
 import { toASCII } from "punycode";
@@ -224,6 +224,8 @@ export function asSolid<T>(collection: Iterable<T>): ReadonlySolid<T> {
     if (isArray(collection)) return collection;
     if (isSet(collection)) return collection;
     if (collection instanceof Map) return collection as any;
+    if (isStream(collection)) return collection.asSolid();
+
     return [...collection];
 }
 
@@ -1621,23 +1623,32 @@ export function split<T>(
     deliminator: Iterable<any>
 ): Iterable<T[]> {
     return iter(function* () {
-        const delim = asArray(deliminator);
+        const delim = asSolid(deliminator);
+        const delimLength = getNonIteratedCount(delim);
+
         let chunk: T[] = [];
-        let i = 0;
+
+        let delimIter = delim[Symbol.iterator]();
+        let next = delimIter.next();
         for (const value of collection) {
-            if (Object.is(value, delim[i])) {
-                i++;
+            if (Object.is(value, next.value)) {
+                next = delimIter.next();
             } else {
-                i = 0;
+                delimIter = delim[Symbol.iterator]();
+                next = delimIter.next();
             }
 
-            if (i === delim.length) {
+            if (next.done) {
                 // remove delim from chunk
-                chunk.splice(chunk.length - delim.length + 1, delim.length - 1);
+                chunk.splice(chunk.length - delimLength + 1, delimLength - 1);
 
+                // reset deliminator iterator
+                delimIter = delim[Symbol.iterator]();
+                next = delimIter.next();
+
+                // yield and reset chunk
                 yield chunk;
                 chunk = [];
-                i = 0;
             } else {
                 chunk.push(value);
             }

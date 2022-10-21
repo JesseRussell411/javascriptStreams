@@ -159,9 +159,6 @@ async function main() {
     console.log(inspect(result, false, null, true));
 
 
-    console.log(Stream.from(",,1,,5,82,,,3,,4,,5,,").skip(3).map(c => {
-        console.log(c);
-        return c;
-    }).split(",,").skip(2).take(2).asArray());
+    console.log(Stream.from("->1->2->->3->4->5->").split("->").asArray());
 }
 main().catch(e => console.error(e));

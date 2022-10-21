@@ -1,3 +1,4 @@
+import { groupCollapsed } from "console";
 import { ReadStream, ReadVResult } from "fs";
 import { userInfo } from "os";
 import { runInThisContext } from "vm";
@@ -94,6 +95,8 @@ import {
     takeWhile,
 } from "./utils";
 
+// TODO maybe? rename to sequence or pipeline or river or creek or flow or drain or plumbing or stupid or Enumerable or iteration or enumeration 
+
 /** Properties of a Stream's source. */
 export interface StreamSourceProperties<T> {
     /** Whether the Iterable from {@link Stream.getSource} is a new instance every time that can be modified safely. */
@@ -107,6 +110,18 @@ export interface StreamSourceProperties<T> {
 export type ValueOfStream<S extends Stream<any>> = S extends Stream<infer T>
     ? T
     : never;
+
+export function isStream<T>(collection: Iterable<T>): collection is Stream<T> {
+    return collection instanceof Stream;
+}
+
+export function asStream<T>(collection: Iterable<T>): Stream<T> {
+    if (isStream(collection)) {
+        return collection;
+    } else {
+        return Stream.from(collection);
+    }
+}
 
 // TODO docs
 export default class Stream<T> implements Iterable<T> {
