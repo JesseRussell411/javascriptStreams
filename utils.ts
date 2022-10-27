@@ -237,11 +237,9 @@ export function includes<T>(collection: Iterable<T>, value: T) {
     return false;
 }
 
-export function join(
-    collection: Iterable<any>,
-    separator: string = ","
-): string {
-    if (isArray(collection)) return collection.join(separator);
+export function join(collection: Iterable<any>, separator: any = ","): string {
+    const sepString = `${separator}`;
+    if (isArray(collection)) return collection.join(sepString);
 
     const result: string[] = [];
     const iterator = collection[Symbol.iterator]();
@@ -251,10 +249,33 @@ export function join(
     result.push(next.value);
 
     while (!(next = iterator.next()).done) {
-        result.push(separator);
+        result.push(sepString);
         result.push(next.value);
     }
     return result.join("");
+}
+
+
+export function mkString<T>(collection: Iterable<T>, separator?: any): string;
+
+export function mkString<T>(
+    collection: Iterable<T>,
+    start: any,
+    separator: any,
+    end?: any
+): string;
+
+export function mkString<T>(
+    collection: Iterable<T>,
+    arg1: any = "",
+    arg2: any = "",
+    arg3: any = ""
+): string {
+    if (arguments.length > 2) {
+        return `${arg1}` + join(collection, `${arg2}`) + `${arg3}`;
+    } else {
+        return join(collection, `${arg1}`);
+    }
 }
 
 /** Adds the key and value to the map and the returns the value */

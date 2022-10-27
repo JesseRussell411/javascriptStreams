@@ -158,7 +158,12 @@ async function main() {
 
     console.log(inspect(result, false, null, true));
 
-
     console.log(Stream.from("->1->2->->3->4->5->").split("->").asArray());
+
+    console.log(Stream.of(1, 2, 3, 4).mkString());
+    console.log(Stream.of(1, 2, 3, 4).mkString(","));
+    console.log(Stream.of(1, 2, 3, 4).mkString("[", ","));
+    console.log(Stream.of(1, 2, 3, 4).mkString("[", ",", "]"));
+    console.log(Stream.of(1,6,9,3,4,9,9,9,2,3,4,1,5,5,6,7,4,2,).order().asArray())
 }
 main().catch(e => console.error(e));

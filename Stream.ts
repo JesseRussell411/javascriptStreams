@@ -93,9 +93,11 @@ import {
     skip,
     skipWhile,
     takeWhile,
+    mkString,
 } from "./utils";
 
-// TODO maybe? rename to sequence or pipeline or river or creek or flow or drain or plumbing or stupid or Enumerable or iteration or enumeration 
+// TODO maybe? rename to sequence or pipeline or river or creek or flow or drain or plumbing or stupid or Enumerable or iteration or enumeration or assemblyLine or conveyerBelt or relay or line or construction or structuredIteration or dataModel or flow or dataFlow or Fly or Fling or transformation or translation or shift or alteration or transmute or transition or conversion or morph
+
 
 /** Properties of a Stream's source. */
 export interface StreamSourceProperties<T> {
@@ -1330,10 +1332,31 @@ export default class Stream<T> implements Iterable<T> {
      * Adds all the values in the Stream into a string, separated by the specified separator string. Like {@link Array.join}.
      * @param separator Put in between the values in the resulting string. Defaults to a comma (,).
      */
-    public join(separator: string = ","): string {
+    public join(separator: any = ","): string {
         return join(this.getSource(), separator);
     }
 
+    // TODO docs
+    public mkString(separator?: any): string;
+
+    // TODO docs
+    public mkString(start: any, separator: any, end?: any): string;
+
+    // TODO docs
+    public mkString(arg1: any = "", arg2: any = "", arg3: any = ""): string {
+        const source = this.getSource();
+
+        // if the source is already a string and there's no start, separator, or end, just return the source, no need to make the string
+        if ( typeof source === "string" && arguments.length === 0) return source;
+
+        if (arguments.length > 1) {
+            return mkString(source, arg1, arg2, arg3);
+        } else {
+            return mkString(source, arg1);
+        }
+    }
+
+    //TODO add depth parameter
     /** Returns a Stream with sub-Iterable elements concatenated into it. */
     public flat(): Stream<T extends Iterable<infer SubT> ? SubT : T> {
         const self = this;
