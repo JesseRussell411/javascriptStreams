@@ -96,8 +96,7 @@ import {
     mkString,
 } from "./utils";
 
-// TODO maybe? rename to sequence or pipeline or river or creek or flow or drain or plumbing or stupid or Enumerable or iteration or enumeration or assemblyLine or conveyerBelt or relay or line or construction or structuredIteration or dataModel or flow or dataFlow or Fly or Fling or transformation or translation or shift or alteration or transmute or transition or conversion or morph
-
+// TODO maybe? rename to sequence or pipeline or river or creek or flow or drain or plumbing or stupid or Enumerable or iteration or enumeration or assemblyLine or conveyerBelt or relay or line or construction or structuredIteration or dataModel or flow or dataFlow or Fly or Fling or transformation or translation or shift or alteration or transmute or transition or conversion or morph or tabulation or beam or 
 
 /** Properties of a Stream's source. */
 export interface StreamSourceProperties<T> {
@@ -444,8 +443,6 @@ export default class Stream<T> implements Iterable<T> {
         return new Stream(
             () => {
                 const index = new Map<K, T>();
-
-                const source = this.getSource();
 
                 let i = 0;
                 for (const value of this)
@@ -1313,8 +1310,10 @@ export default class Stream<T> implements Iterable<T> {
 
     /** @returns Whether the Stream is empty. */
     public none(): boolean;
+
     /** @returns Whether none of the values in the stream pass the given test. */
     public none(test: (value: T, index: number) => boolean): boolean;
+
     public none(
         test: (value: T, index: number) => boolean = () => true
     ): boolean {
@@ -1345,9 +1344,6 @@ export default class Stream<T> implements Iterable<T> {
     // TODO docs
     public mkString(arg1: any = "", arg2: any = "", arg3: any = ""): string {
         const source = this.getSource();
-
-        // if the source is already a string and there's no start, separator, or end, just return the source, no need to make the string
-        if ( typeof source === "string" && arguments.length === 0) return source;
 
         if (arguments.length > 1) {
             return mkString(source, arg1, arg2, arg3);

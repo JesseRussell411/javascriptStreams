@@ -239,6 +239,9 @@ export function includes<T>(collection: Iterable<T>, value: T) {
 
 export function join(collection: Iterable<any>, separator: any = ","): string {
     const sepString = `${separator}`;
+
+    if (typeof collection === "string" && sepString === "") return collection;
+
     if (isArray(collection)) return collection.join(sepString);
 
     const result: string[] = [];
@@ -255,24 +258,23 @@ export function join(collection: Iterable<any>, separator: any = ","): string {
     return result.join("");
 }
 
+export function mkString(collection: Iterable<any>, separator?: any): string;
 
-export function mkString<T>(collection: Iterable<T>, separator?: any): string;
-
-export function mkString<T>(
-    collection: Iterable<T>,
+export function mkString(
+    collection: Iterable<any>,
     start: any,
     separator: any,
     end?: any
 ): string;
 
-export function mkString<T>(
-    collection: Iterable<T>,
+export function mkString(
+    collection: Iterable<any>,
     arg1: any = "",
     arg2: any = "",
     arg3: any = ""
 ): string {
     if (arguments.length > 2) {
-        return `${arg1}` + join(collection, `${arg2}`) + `${arg3}`;
+        return `${arg1}${join(collection, `${arg2}`)}${arg3}`;
     } else {
         return join(collection, `${arg1}`);
     }

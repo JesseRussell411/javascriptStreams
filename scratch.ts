@@ -164,6 +164,22 @@ async function main() {
     console.log(Stream.of(1, 2, 3, 4).mkString(","));
     console.log(Stream.of(1, 2, 3, 4).mkString("[", ","));
     console.log(Stream.of(1, 2, 3, 4).mkString("[", ",", "]"));
-    console.log(Stream.of(1,6,9,3,4,9,9,9,2,3,4,1,5,5,6,7,4,2,).order().asArray())
+    console.log(
+        Stream.of(1, 6, 9, 3, 4, 9, 9, 9, 2, 3, 4, 1, 5, 5, 6, 7, 4, 2)
+            .orderDescending()
+            .asArray()
+    );
+
+    console.log(Stream.from("abc").mkString(",", "", "]"))
+
+    console.log(Stream.of(1,2,3,4,5).mkString())
+
+
+    const aa = [1,2,3,4,5];
+    const ss = new Stream(() => aa)
+
+
+    console.log("should print true:",ss.toArray() == ss.toArray());
+
 }
 main().catch(e => console.error(e));
