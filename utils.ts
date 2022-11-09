@@ -1022,45 +1022,83 @@ export function groupBy<T, K>(
     return groups;
 }
 
+// TODO docs
 export function groupJoin<O, I, K, R>(
     outer: Iterable<O>,
     inner: Iterable<I>,
     outerKeySelector: (value: O) => K,
     innerKeySelector: (value: I) => K,
-    resultSelector: (outer: O, inner: I[]) => R
+    resultSelector: (outer: O, inner: I[]) => R,
+    comparison?: (outer: O, inner: I) => boolean
 ): Iterable<R> {
-    return iter(function* () {
-        const innerGrouped = groupBy(inner, innerKeySelector);
+    if (comparison === undefined) {
+        // standard comparison (Object.is), O(n)
+        return iter(function* () {
+            const innerGrouped = groupBy(inner, innerKeySelector);
 
-        for (const outerValue of outer) {
-            const key = outerKeySelector(outerValue);
-            const inner = innerGrouped.get(key);
-            yield resultSelector(outerValue, inner ?? []);
-        }
-    });
+            for (const outerValue of outer) {
+                const key = outerKeySelector(outerValue);
+                const inner = innerGrouped.get(key);
+                yield resultSelector(outerValue, inner ?? []);
+            }
+        });
+    } else {
+        // nonstandard comparison, O(n^2)
+        return iter(function* () {
+            const innerCached = lazyCacheIterable(inner);
+
+            for (const outerValue of outer) {
+                const innerGroup: I[] = [];
+
+                for (const innerValue of innerCached) {
+                    if (comparison(outerValue, innerValue)) {
+                        innerGroup.push(innerValue);
+                    }
+                }
+
+                yield resultSelector(outerValue, innerGroup);
+            }
+        });
+    }
 }
 
+// TODO docs
 export function innerJoin<O, I, K, R>(
     outer: Iterable<O>,
     inner: Iterable<I>,
     outerKeySelector: (value: O) => K,
     innerKeySelector: (value: I) => K,
-    resultSelector: (outer: O, inner: I) => R
+    resultSelector: (outer: O, inner: I) => R,
+    comparison?: (outer: O, inner: I) => boolean
 ) {
-    return iter(function* () {
-        // const innerIndexed = indexBy(inner, innerKeySelector);
-        const innerGrouped = groupBy(inner, innerKeySelector);
+    if (comparison === undefined) {
+        // standard comparison (Object.is), O(n^2 / ?)
+        return iter(function* () {
+            const innerGrouped = groupBy(inner, innerKeySelector);
 
-        for (const outerValue of outer) {
-            const key = outerKeySelector(outerValue);
-            const innerGroup = innerGrouped.get(key);
-            if (innerGroup !== undefined) {
-                for (const innerValue of innerGroup) {
-                    yield resultSelector(outerValue, innerValue);
+            for (const outerValue of outer) {
+                const key = outerKeySelector(outerValue);
+                const innerGroup = innerGrouped.get(key);
+                if (innerGroup !== undefined) {
+                    for (const innerValue of innerGroup) {
+                        yield resultSelector(outerValue, innerValue);
+                    }
                 }
             }
-        }
-    });
+        });
+    } else {
+        // nonstandard comparison, O(n^2)
+        return iter(function* () {
+            const innerCached = lazyCacheIterable(inner);
+            for (const outerValue of outer) {
+                for (const innerValue of innerCached) {
+                    if (comparison(outerValue, innerValue)) {
+                        yield resultSelector(outerValue, innerValue);
+                    }
+                }
+            }
+        });
+    }
 }
 
 export function getNonIteratedCountOrUndefined(

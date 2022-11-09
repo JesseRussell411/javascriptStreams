@@ -96,7 +96,7 @@ import {
     mkString,
 } from "./utils";
 
-// TODO maybe? rename to sequence or pipeline or river or creek or flow or drain or plumbing or stupid or Enumerable or iteration or enumeration or assemblyLine or conveyerBelt or relay or line or construction or structuredIteration or dataModel or flow or dataFlow or Fly or Fling or transformation or translation or shift or alteration or transmute or transition or conversion or morph or tabulation or beam or 
+// TODO maybe? rename to sequence or pipeline or river or creek or flow or drain or plumbing or stupid or Enumerable or iteration or enumeration or assemblyLine or conveyerBelt or relay or line or construction or structuredIteration or dataModel or flow or dataFlow or Fly or Fling or transformation or translation or shift or alteration or transmute or transition or conversion or morph or tabulation or beam or
 
 /** Properties of a Stream's source. */
 export interface StreamSourceProperties<T> {
@@ -405,7 +405,8 @@ export default class Stream<T> implements Iterable<T> {
         inner: Iterable<I>,
         keySelector: (value: T) => K,
         innerKeySelector: (value: I) => K,
-        resultSelector: (outer: T, inner: I[]) => R
+        resultSelector: (outer: T, inner: I[]) => R,
+        comparison?: (outer: T, inner: I) => boolean
     ): Stream<R> {
         return Stream.from(
             groupJoin(
@@ -413,7 +414,8 @@ export default class Stream<T> implements Iterable<T> {
                 inner,
                 keySelector,
                 innerKeySelector,
-                resultSelector
+                resultSelector,
+                comparison
             )
         );
     }
@@ -423,7 +425,8 @@ export default class Stream<T> implements Iterable<T> {
         inner: Iterable<I>,
         keySelector: (value: T) => K,
         innerKeySelector: (value: I) => K,
-        resultSelector: (outer: T, inner: I) => R
+        resultSelector: (outer: T, inner: I) => R,
+        comparison?: (outer: T, inner: I) => boolean
     ): Stream<R> {
         return new Stream(
             eager(
@@ -432,7 +435,8 @@ export default class Stream<T> implements Iterable<T> {
                     inner,
                     keySelector,
                     innerKeySelector,
-                    resultSelector
+                    resultSelector,
+                    comparison
                 )
             )
         );

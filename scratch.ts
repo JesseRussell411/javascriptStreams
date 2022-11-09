@@ -174,12 +174,5 @@ async function main() {
 
     console.log(Stream.of(1,2,3,4,5).mkString())
 
-
-    const aa = [1,2,3,4,5];
-    const ss = new Stream(() => aa)
-
-
-    console.log("should print true:",ss.toArray() == ss.toArray());
-
 }
 main().catch(e => console.error(e));
