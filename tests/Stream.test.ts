@@ -28,7 +28,6 @@ test("filter", () => {
 describe("reduce", () => {
     describe("of empty", () => {
         test("with initial value", () => {
-            // expect(Stream.empty<number>().reduce((p, c) => p + c, -1)).toBe(-1);
             expect(Stream.empty<number>().reduce((p, c) => p + c, -1)).toBe(-1);
         });
         test("without initial value throws error", () => {
