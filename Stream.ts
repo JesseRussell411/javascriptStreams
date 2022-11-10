@@ -88,12 +88,12 @@ import {
     reduceAndFinalize,
     requireInteger,
     requirePositive,
-    innerJoin,
     split,
     skip,
     skipWhile,
     takeWhile,
     mkString,
+    leftJoin,
 } from "./utils";
 
 // TODO maybe? rename to sequence or pipeline or river or creek or flow or drain or plumbing or stupid or Enumerable or iteration or enumeration or assemblyLine or conveyerBelt or relay or line or construction or structuredIteration or dataModel or flow or dataFlow or Fly or Fling or transformation or translation or shift or alteration or transmute or transition or conversion or morph or tabulation or beam or
@@ -146,6 +146,7 @@ export default class Stream<T> implements Iterable<T> {
         else return undefined;
     }
 
+    // TODO  docs
     protected static addCountOrUndefined(
         stream: Stream<any>,
         addition: number
@@ -153,6 +154,14 @@ export default class Stream<T> implements Iterable<T> {
         if (stream.sourceProperties.count !== undefined)
             return stream.sourceProperties.count + addition;
         else return undefined;
+    }
+
+    protected static getSource<T>(maybeStream: Iterable<T>): Iterable<T> {
+        if (maybeStream instanceof Stream) {
+            return maybeStream.getSource();
+        } else {
+            return maybeStream;
+        }
     }
 
     public constructor(
@@ -408,10 +417,10 @@ export default class Stream<T> implements Iterable<T> {
         resultSelector: (outer: T, inner: I[]) => R,
         comparison?: (outer: T, inner: I) => boolean
     ): Stream<R> {
-        return Stream.from(
+        return new Stream(() =>
             groupJoin(
                 this.getSource(),
-                inner,
+                Stream.getSource(inner),
                 keySelector,
                 innerKeySelector,
                 resultSelector,
@@ -421,23 +430,41 @@ export default class Stream<T> implements Iterable<T> {
     }
 
     //TODO docs
-    public innerJoin<I, K, R>(
+    public join<I, K, R>(
         inner: Iterable<I>,
         keySelector: (value: T) => K,
         innerKeySelector: (value: I) => K,
         resultSelector: (outer: T, inner: I) => R,
         comparison?: (outer: T, inner: I) => boolean
     ): Stream<R> {
-        return new Stream(
-            eager(
-                innerJoin(
-                    this.getSource(),
-                    inner,
-                    keySelector,
-                    innerKeySelector,
-                    resultSelector,
-                    comparison
-                )
+        return new Stream(() =>
+            join(
+                this.getSource(),
+                Stream.getSource(inner),
+                keySelector,
+                innerKeySelector,
+                resultSelector,
+                comparison
+            )
+        );
+    }
+
+    //TODO docs
+    public leftJoin<Right, Key, Result>(
+        right: Iterable<Right>,
+        keySelector: (left: T) => Key,
+        rightKeySelector: (right: Right) => Key,
+        resultSelector: ((left: T, right: Right) => Key) & ((left: T) => Key),
+        comparison?: (left: T, right: Right) => boolean
+    ) {
+        return new Stream(() =>
+            leftJoin(
+                this.getSource(),
+                Stream.getSource(right),
+                keySelector,
+                rightKeySelector,
+                resultSelector,
+                comparison
             )
         );
     }
@@ -459,23 +486,7 @@ export default class Stream<T> implements Iterable<T> {
     }
 
     /**
-     * An out-of-place sort of the values in the Stream based on the given comparator. Like {@link Array.sort}. A better version of this is {@link orderBy}. This method is included simply to emulate {@link Array}'s behavior.
-     * @returns A Stream of the original Streams values sorted by the comparator.
-     * @params comparator How to sort the values. If omitted, the values are sorted in ascending, ASCII order.
-     */
-    public sort(comparator?: (a: T, b: T) => number): Stream<T> {
-        return new Stream(
-            () => {
-                const sorted = this.toArray();
-                sorted.sort(comparator);
-                return sorted;
-            },
-            { oneOff: true, count: this.sourceProperties.count }
-        );
-    }
-
-    /**
-     * Sorts the Stream from least to greatest based on the key from the given key selector function.
+     * Sorts the Stream from least to greatest based on the key from the given key selector function. Comparison is done by {@link smartCompare}.
      */
     public orderBy(keySelector: (value: T) => any): OrderedStream<T>;
     /**
@@ -489,7 +500,7 @@ export default class Stream<T> implements Iterable<T> {
     }
 
     /**
-     * Sorts the Stream from greatest to least based on the key from the given key selector function.
+     * Sorts the Stream from greatest to least based on the key from the given key selector function. Comparison is done by {@link smartCompare}.
      */
     public orderByDescending(keySelector: (value: T) => any): OrderedStream<T>;
     /**
@@ -501,14 +512,14 @@ export default class Stream<T> implements Iterable<T> {
     }
 
     /**
-     * Sorts the Stream from least to greatest.
+     * Sorts the Stream from least to greatest. Comparison is done by {@link smartCompare}.
      */
     public order(): OrderedStream<T> {
         return this.orderBy(value => value);
     }
 
     /**
-     * Sorts the Stream from greatest to least.
+     * Sorts the Stream from greatest to least. Comparison is done by {@link smartCompare}.
      */
     public orderDescending(): OrderedStream<T> {
         return this.orderByDescending(value => value);
@@ -677,7 +688,6 @@ export default class Stream<T> implements Iterable<T> {
         const usableAt = BigInt(at);
         // TODO add upper bound.
 
-        const otherCount = getNonIteratedCountOrUndefined(other);
         const self = this;
         return new Stream(
             eager(
@@ -1331,14 +1341,6 @@ export default class Stream<T> implements Iterable<T> {
         return true;
     }
 
-    /**
-     * Adds all the values in the Stream into a string, separated by the specified separator string. Like {@link Array.join}.
-     * @param separator Put in between the values in the resulting string. Defaults to a comma (,).
-     */
-    public join(separator: any = ","): string {
-        return join(this.getSource(), separator);
-    }
-
     // TODO docs
     public mkString(separator?: any): string;
 
@@ -1574,9 +1576,9 @@ export default class Stream<T> implements Iterable<T> {
      * @param other The other Iterable to check the Stream against.
      * @param checkEquality Test for whether two values are equal. Defaults to {@link Object.is}.
      */
-    public sequenceEqual(
-        other: Iterable<T>,
-        checkEquality: (a: T, b: T) => boolean = (a, b) => Object.is(a, b)
+    public sequenceEqual<O>(
+        other: Iterable<O>,
+        checkEquality: (a: T, b: O) => boolean = (a, b) => Object.is(a, b)
     ) {
         const source = this.getSource();
         const otherSource = other instanceof Stream ? other.getSource() : other;
@@ -1670,7 +1672,7 @@ export default class Stream<T> implements Iterable<T> {
     }
     // TODO docs
     public toString() {
-        return this.join(",");
+        return this.mkString(",");
     }
     // TODO docs
     public toJSON() {

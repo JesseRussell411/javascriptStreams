@@ -60,10 +60,14 @@ export function lazyCacheIterator<T>(iterator: Iterator<T>): Iterable<T> {
 }
 
 /**
- * @returns A cached Iterable over the given Iterable. The output of the Iterable is lazily cached. This means that the first time it's iterated is the only time the given Iterable is iterated. After this the cached output of the Iterable is what's iterated
+ * @returns A cached Iterable over the given Iterable. The output of the Iterable is lazily cached. This means that the first time it's iterated is the only time the given Iterable is iterated. After this the cached output of the Iterable is what's iterated. NOTE: this is unless the original iterable {@link isSolid}, in which case the original iterable is returned and is, therefore, iterated every time.
  */
 export function lazyCacheIterable<T>(iterable: Iterable<T>): Iterable<T> {
-    return lazyCacheIterator(iterable[Symbol.iterator]());
+    if (isSolid(iterable)){
+        return iterable;
+    } else {
+        return lazyCacheIterator(iterable[Symbol.iterator]());
+    }
 }
 
 /** @returns An Iterable over the Generator from the given function */
@@ -237,7 +241,7 @@ export function includes<T>(collection: Iterable<T>, value: T) {
     return false;
 }
 
-export function join(collection: Iterable<any>, separator: any = ","): string {
+function mkStringHelper(collection: Iterable<any>, separator: any = ","): string {
     const sepString = `${separator}`;
 
     if (typeof collection === "string" && sepString === "") return collection;
@@ -274,9 +278,9 @@ export function mkString(
     arg3: any = ""
 ): string {
     if (arguments.length > 2) {
-        return `${arg1}${join(collection, `${arg2}`)}${arg3}`;
+        return `${arg1}${mkStringHelper(collection, `${arg2}`)}${arg3}`;
     } else {
-        return join(collection, `${arg1}`);
+        return mkStringHelper(collection, `${arg1}`);
     }
 }
 
@@ -1063,7 +1067,7 @@ export function groupJoin<O, I, K, R>(
 }
 
 // TODO docs
-export function innerJoin<O, I, K, R>(
+export function join<O, I, K, R>(
     outer: Iterable<O>,
     inner: Iterable<I>,
     outerKeySelector: (value: O) => K,
@@ -1100,6 +1104,54 @@ export function innerJoin<O, I, K, R>(
         });
     }
 }
+
+export function leftJoin<O, I, K, R>(
+    left: Iterable<O>,
+    right: Iterable<I>,
+    leftKeySelector: (value: O) => K,
+    innerKeySelector: (value: I) => K,
+    resultSelector: ((left: O, right: I) => R) & ((left:O) => R),
+    comparison?: (left: O, right: I) => boolean
+): Iterable<R> {
+    if (comparison === undefined) {
+        // standard comparison (Object.is), O(n^2 / ?)
+        return iter(function* () {
+            const innerGrouped = groupBy(right, innerKeySelector);
+
+            for (const leftValue of left) {
+                const key = leftKeySelector(leftValue);
+                const innerGroup = innerGrouped.get(key);
+                if (innerGroup !== undefined && innerGroup.length > 0) {
+                    for (const innerValue of innerGroup) {
+                        yield resultSelector(leftValue, innerValue);
+                    }
+                } else {
+                    yield resultSelector(leftValue)
+                }
+            }
+        });
+    } else {
+        // nonstandard comparison, O(n^2)
+        return iter(function* () {
+            const rightCached = lazyCacheIterable(right);
+
+            for (const leftValue of left) {
+                let matchFound = false;
+                for (const rightValue of rightCached) {
+                    if (comparison(leftValue, rightValue)) {
+                        matchFound = true;
+                        yield resultSelector(leftValue, rightValue);
+                    }
+                }
+
+                if (!matchFound){
+                    yield resultSelector(leftValue);
+                }
+            }
+        });
+    }
+}
+
 
 export function getNonIteratedCountOrUndefined(
     collection: Iterable<any>

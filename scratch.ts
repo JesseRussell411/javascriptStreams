@@ -135,7 +135,7 @@ async function main() {
 
     const result = customers
         .groupJoin(
-            purchases.innerJoin(
+            purchases.join(
                 products,
                 purchase => purchase.productID,
                 product => product.id,
