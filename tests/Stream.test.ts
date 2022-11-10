@@ -3,26 +3,49 @@ import { getCustomers } from "../testData/customers";
 import { getProducts } from "../testData/products";
 import { getPurchases } from "../testData/purchases";
 
-test("sequenceEqual", () => {
-    expect(Stream.of(42, 100, 3, 42).sequenceEqual([42, 100, 3, 42])).toBe(
-        true
-    );
+describe("sequenceEqual", () => {
+    test("of empty streams", () => {
+        expect(Stream.empty().sequenceEqual(Stream.of())).toBe(true);
+    });
+    test("of non equal streams", () => {
+        expect(Stream.of(1, 2, 3).sequenceEqual(Stream.of(3, 2, 1))).toBe(
+            false
+        );
+        expect(Stream.of(1, 2, 3).sequenceEqual(Stream.of(1, 2, 3, 4))).toBe(
+            false
+        );
+        expect(Stream.of(1, 2, 3, 4).sequenceEqual(Stream.of(1, 2, 3))).toBe(
+            false
+        );
+        expect(Stream.of("1", "2", "3").sequenceEqual(Stream.of(1, 2, 3))).toBe(
+            false
+        );
+    });
+    test("of equal streams", () => {
+        expect(
+            Stream.of(1, 2, 3, 4, 5).sequenceEqual(Stream.of(1, 2, 3, 4, 5))
+        ).toBe(true);
+    });
 });
 
-test("map", () => {
-    expect(
-        Stream.of(1, 2, 3, 4, 5, 6)
-            .map(n => n / 2)
-            .sequenceEqual([0.5, 1, 1.5, 2, 2.5, 3])
-    ).toBe(true);
+describe("map", () => {
+    test("numbers", () => {
+        expect(
+            Stream.of(1, 2, 3, 4, 5, 6)
+                .map(n => n / 2)
+                .sequenceEqual([0.5, 1, 1.5, 2, 2.5, 3])
+        ).toBe(true);
+    });
 });
 
-test("filter", () => {
-    expect(
-        Stream.of(1, 2, 3, 4, 5, 8, 20, 21, 20)
-            .filter(n => n % 2 == 0)
-            .sequenceEqual([2, 4, 8, 20, 20])
-    ).toBe(true);
+describe("filter", () => {
+    test("numbers", () => {
+        expect(
+            Stream.of(1, 2, 3, 4, 5, 8, 20, 21, 20)
+                .filter(n => n % 2 == 0)
+                .sequenceEqual([2, 4, 8, 20, 20])
+        ).toBe(true);
+    });
 });
 
 describe("reduce", () => {
@@ -56,3 +79,5 @@ test("map to select name", async () => {
         .map(c => c.first_name)
         .forEach(n => expect(typeof n).toBe("string"));
 });
+
+// TODO LOTS MORE TESTS TO WRITE!
