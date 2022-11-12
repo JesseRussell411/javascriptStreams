@@ -1,0 +1,162 @@
+[
+    {
+        "name": "just a dead thing",
+        "price": 518,
+        "id": 1
+    },
+    {
+        "name": "junk master",
+        "price": 312,
+        "id": 2
+    },
+    {
+        "name": "meat-based veggies",
+        "price": 732,
+        "id": 3
+    },
+    {
+        "name": "lip balm",
+        "price": 407,
+        "id": 4
+    },
+    {
+        "name": "powerBook",
+        "price": 574,
+        "id": 5
+    },
+    {
+        "name": "in-fruit-inator",
+        "price": 42,
+        "id": 6
+    },
+    {
+        "name": "mega-mart-express",
+        "price": 507,
+        "id": 7
+    },
+    {
+        "name": "X-treme sunglasses",
+        "price": 732,
+        "id": 8
+    },
+    {
+        "name": "russian screwdriver",
+        "price": 713,
+        "id": 9
+    },
+    {
+        "name": "banana mania",
+        "price": 729,
+        "id": 10
+    },
+    {
+        "name": "canadian squirt gun",
+        "price": 546,
+        "id": 11
+    },
+    {
+        "name": "lip bomb",
+        "price": 850,
+        "id": 12
+    },
+    {
+        "name": "I can't believe it's butter",
+        "price": 146,
+        "id": 13
+    },
+    {
+        "name": "sack of hammers",
+        "price": 494,
+        "id": 14
+    },
+    {
+        "name": "nuclear lip balm",
+        "price": 313,
+        "id": 15
+    },
+    {
+        "name": "orange",
+        "price": 980,
+        "id": 16
+    },
+    {
+        "name": "power blaster 9000",
+        "price": 913,
+        "id": 17
+    },
+    {
+        "name": "ridiculous soaker",
+        "price": 561,
+        "id": 18
+    },
+    {
+        "name": "message master",
+        "price": 353,
+        "id": 19
+    },
+    {
+        "name": "rocket scooter",
+        "price": 334,
+        "id": 20
+    },
+    {
+        "name": "powdered milk",
+        "price": 821,
+        "id": 21
+    },
+    {
+        "name": "squirt gun",
+        "price": 885,
+        "id": 22
+    },
+    {
+        "name": "ajax extreme",
+        "price": 502,
+        "id": 23
+    },
+    {
+        "name": "gas-cooker",
+        "price": 604,
+        "id": 24
+    },
+    {
+        "name": "apple",
+        "price": 927,
+        "id": 25
+    },
+    {
+        "name": "powdered cheese",
+        "price": 363,
+        "id": 26
+    },
+    {
+        "name": "plant-based burger",
+        "price": 226,
+        "id": 27
+    },
+    {
+        "name": "turkey baster",
+        "price": 326,
+        "id": 28
+    },
+    {
+        "name": "quarter master",
+        "price": 251,
+        "id": 29
+    },
+    {
+        "name": "mega string",
+        "price": 407,
+        "id": 30
+    },
+    {
+        "name": "ajax bleach",
+        "price": 82,
+        "id": 31
+    },
+    {
+        "name": "super scoot",
+        "price": 822,
+        "id": 32
+    }
+]

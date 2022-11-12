@@ -158,7 +158,12 @@ async function main() {
 
     console.log(inspect(result, false, null, true));
 
-    console.log(Stream.from("->1->2->->3->4->5->").split("->").asArray());
+    console.log(
+        Stream.from("->1->2->->3->4->5->")
+            .split("->")
+            .map(c => c.join(""))
+            .asArray()
+    );
 
     console.log(Stream.of(1, 2, 3, 4).mkString());
     console.log(Stream.of(1, 2, 3, 4).mkString(","));
@@ -170,9 +175,34 @@ async function main() {
             .asArray()
     );
 
-    console.log(Stream.from("abc").mkString(",", "", "]"))
+    console.log(Stream.from("abc").mkString(",", "", "]"));
 
-    console.log(Stream.of(1,2,3,4,5).mkString())
+    console.log(Stream.of(1, 2, 3, 4, 5).mkString());
 
+    console.log(Stream.of("a", "b", "c", "d", "e").withIndex().asArray());
+
+    console.log(
+        Stream.of<[number, string]>([1, "one"], [2, "two"], [3, "three"]).asMap(
+            e => 2 > e[0],
+            e => 9n
+        )
+    );
+
+    const m = new Map([
+        [1, "one"],
+        [2, "two"],
+    ]);
+
+    console.log(m === Stream.from(m).asMap());
+    console.log(Stream.from("aAbBcCdD").partition(2).asMap());
+
+    const vector1 = [1, 2, 3] as const;
+    const vector2 = [5, 2, 3] as const;
+
+    const dotProduct12 = Stream.from(vector1)
+        .merge(vector2, (a, b) => a * b)
+        .reduce((t, c) => t + c);
+
+    console.table({ vector1, vector2, dotProduct12 });
 }
 main().catch(e => console.error(e));

@@ -30,6 +30,8 @@ async function main() {
             })
         )
         .cache();
+    
+    console.log(inspect(customers.take(2).toArray(),false, null, true));
 
     type Customer = ValueOfStream<typeof customers>;
     type Product = ValueOfArray<Customer["purchases"]>;
@@ -74,7 +76,7 @@ async function main() {
                     ...c,
                     totalSpent: c.purchases.reduce(
                         (total, p) => total + p.price,
-                        0n
+                        0
                     ),
                 }))
                 .takeRandom(2)

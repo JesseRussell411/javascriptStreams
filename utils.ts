@@ -5,6 +5,53 @@ import { toASCII } from "punycode";
 import { isNumberObject } from "util/types";
 import { groupCollapsed } from "console";
 
+// TODO DOCS
+export function deepCopy<T>(object: T): T {
+    if (typeof object === "object" && object !== null) {
+        const copy: any = Array.isArray(object) ? [] : {};
+
+        for (const field in object) {
+            copy[field] = deepCopy(object[field]);
+        }
+
+        return copy;
+    } else {
+        return object;
+    }
+}
+
+//TODO DOCS
+export function deepEquals(a: any, b: any) {
+    if (Object.is(a, b)) return true;
+    if (a == null || b == null) return false;
+    if (typeof a !== "object" || typeof b !== "object") return false;
+
+    if (Array.isArray(a)) {
+        if (Array.isArray(b)) {
+            if (a.length !== b.length) return false;
+
+            for (let i = 0; i < a.length; i++) {
+                if (!deepEquals(a[i], b[i])) return false;
+            }
+            return true;
+        } else return false;
+    } else if (Array.isArray(b)) {
+        return false;
+    } else {
+        // TODO? check lengths (including prototype fields)
+
+        for (const field in a) {
+            if (!(field in b) || !deepEquals(a[field], b[field])) return false;
+        }
+        // TODO find better way to do this
+
+        for (const field in b) {
+            if (!(field in a)) return false;
+        }
+        return true;
+    }
+}
+
 /**
  * @returns Returns a function which returns the given value.
  */
@@ -63,7 +110,7 @@ export function lazyCacheIterator<T>(iterator: Iterator<T>): Iterable<T> {
  * @returns A cached Iterable over the given Iterable. The output of the Iterable is lazily cached. This means that the first time it's iterated is the only time the given Iterable is iterated. After this the cached output of the Iterable is what's iterated. NOTE: this is unless the original iterable {@link isSolid}, in which case the original iterable is returned and is, therefore, iterated every time.
  */
 export function lazyCacheIterable<T>(iterable: Iterable<T>): Iterable<T> {
-    if (isSolid(iterable)){
+    if (isSolid(iterable)) {
         return iterable;
     } else {
         return lazyCacheIterator(iterable[Symbol.iterator]());
@@ -172,40 +219,53 @@ export function isIterable(value: any): value is Iterable<unknown> {
 }
 
 export function isArray<T>(
-    collection: T[] | Set<T> | ReadonlySet<T>
-): collection is T[];
-export function isArray<T>(
-    collection: Iterable<T>
-): collection is T[] | readonly T[];
-export function isArray<T>(
-    collection: Iterable<T>
-): collection is T[] | readonly T[] {
-    return Array.isArray(collection);
+    collection: ReadonlySolid<T>
+): collection is readonly any[];
+
+export function isArray<T>(collection: Iterable<T>): collection is T[];
+
+export function isArray(value: any): value is unknown[];
+
+export function isArray(value: any): boolean {
+    return Array.isArray(value);
 }
 
 export function isSet<T>(
-    collection: T[] | readonly T[] | Set<T>
-): collection is Set<T>;
-export function isSet<T>(
-    collection: Iterable<T>
-): collection is Set<T> | ReadonlySet<T>;
-export function isSet<T>(collection: Iterable<T>): boolean {
-    return collection instanceof Set;
+    collection: ReadonlySolid<T>
+): collection is ReadonlySet<T>;
+
+export function isSet<T>(collection: Iterable<T>): collection is Set<T>;
+
+export function isSet<T>(value: any): value is Set<unknown>;
+
+export function isSet(value: any): boolean {
+    return value instanceof Set;
 }
 
 export function isMap<K, V>(
-    collection:
-        | Map<K, V>
-        | EntryLike<K, V>[]
-        | readonly EntryLike<K, V>[]
-        | Set<EntryLike<K, V>>
-        | ReadonlySet<EntryLike<K, V>>
-): collection is Map<K, V>;
+    collection: ReadonlySolid<EntryLike<K, V>>
+): collection is ReadonlyMap<K, V>;
+
+export function isMap(
+    collection: ReadonlySolid<any>
+): collection is ReadonlyMap<unknown, unknown>;
+
 export function isMap<K, V>(
     collection: Iterable<EntryLike<K, V>>
-): collection is Map<K, V> | ReadonlyMap<K, V>;
-export function isMap<K, V>(collection: Iterable<EntryLike<K, V>>): boolean {
-    return collection instanceof Map;
+): collection is Map<K, V>;
+
+export function isMap(value: any): value is Map<unknown, unknown>;
+
+export function isMap(value: any): boolean {
+    return value instanceof Map;
+}
+
+export function isSolid<T>(collection: Iterable<T>): collection is Solid<T>;
+
+export function isSolid(value: any): value is Solid<unknown>;
+
+export function isSolid(value: any): boolean {
+    return Array.isArray(value) || value instanceof Set || value instanceof Map;
 }
 
 export function asArray<T>(collection: Iterable<T>): readonly T[] {
@@ -233,15 +293,42 @@ export function asSolid<T>(collection: Iterable<T>): ReadonlySolid<T> {
     return [...collection];
 }
 
-export function includes<T>(collection: Iterable<T>, value: T) {
-    if (isSet(collection)) return collection.has(value);
-    if (isArray(collection)) return collection.includes(value);
-    for (const collectionValue of collection)
-        if (Object.is(value, collectionValue)) return true;
-    return false;
+export function includes<T>(
+    collection: Iterable<T>,
+    value: T,
+    fromIndex?: number | bigint
+) {
+    if (fromIndex !== undefined) {
+        requireInteger(requirePositive(fromIndex));
+        if (isArray(collection)) {
+            return collection.includes(value, Number(fromIndex));
+        } else {
+            const iterator = collection[Symbol.iterator]();
+
+            for (let i = 0n; i < fromIndex; i++) {
+                if (iterator.next().done) return false;
+            }
+
+            let next: IteratorResult<T>;
+            while (!(next = iterator.next()).done) {
+                if (Object.is(value, next.value)) return true;
+            }
+
+            return false;
+        }
+    } else {
+        if (isSet(collection)) return collection.has(value);
+        if (isArray(collection)) return collection.includes(value);
+        for (const collectionValue of collection)
+            if (Object.is(value, collectionValue)) return true;
+        return false;
+    }
 }
 
-function mkStringHelper(collection: Iterable<any>, separator: any = ","): string {
+function mkStringHelper(
+    collection: Iterable<any>,
+    separator: any = ","
+): string {
     const sepString = `${separator}`;
 
     if (typeof collection === "string" && sepString === "") return collection;
@@ -299,22 +386,9 @@ export function setAndGet<K, MV, V extends MV>(
  * @throws If the Stream is empty.
  */
 export function last<T>(collection: Iterable<T>): T {
-    function throwEmptyError() {
+    return lastOrDefault(collection, () => {
         throw new Error("collection has no last value because it is empty");
-    }
-    if (isArray(collection)) {
-        if (collection.length > 0) return collection[collection.length - 1]!;
-        else throwEmptyError();
-    }
-
-    const iter = collection[Symbol.iterator]();
-    let next = iter.next();
-
-    if (next.done) throwEmptyError();
-
-    let last: T = next.value;
-    while (!(next = iter.next()).done) last = next.value;
-    return last;
+    });
 }
 
 /**
@@ -332,8 +406,11 @@ export function lastOrDefault<T, D>(
     getDefault: () => D
 ): T | D {
     if (isArray(collection)) {
-        if (collection.length > 0) return collection[collection.length - 1]!;
-        else return getDefault();
+        if (collection.length > 0) {
+            return collection[collection.length - 1]!;
+        } else {
+            return getDefault();
+        }
     }
 
     const iter = collection[Symbol.iterator]();
@@ -343,6 +420,7 @@ export function lastOrDefault<T, D>(
 
     let last: T = next.value;
     while (!(next = iter.next()).done) last = next.value;
+
     return last;
 }
 
@@ -631,7 +709,7 @@ export function flat<SubT>(
         }
     });
 }
-
+//TODO DOCS
 export function zipperMerge<A, B>(
     a: Iterable<A>,
     b: Iterable<B>
@@ -753,26 +831,77 @@ export type EntryLikeValue<V> =
     | [any, V, ...any]
     | { 1: V; [key: ObjectKey]: any };
 
-export function asMap<T>(
-    collection: Iterable<T>
-): T extends EntryLike<infer K, infer V>
-    ? ReadonlyMap<K, V>
-    : T extends EntryLikeKey<infer K>
-    ? ReadonlyMap<K, unknown>
-    : T extends EntryLikeValue<infer V>
-    ? ReadonlyMap<unknown, V>
-    : ReadonlyMap<unknown, unknown>;
+export type AsMap<I extends Iterable<any>> = I extends Iterable<infer T>
+    ? T extends EntryLike<infer K, infer V>
+        ? ReadonlyMap<K, V>
+        : T extends EntryLikeKey<infer K>
+        ? ReadonlyMap<K, unknown>
+        : T extends EntryLikeValue<infer V>
+        ? ReadonlyMap<unknown, V>
+        : ReadonlyMap<unknown, unknown>
+    : never;
 
-export function asMap<T extends EntryLikeValue<V>, K, V>(
+export type AsMapWithKey<I extends Iterable<any>, K> = I extends Iterable<
+    infer T
+>
+    ? T extends EntryLikeValue<infer V>
+        ? ReadonlyMap<K, V>
+        : ReadonlyMap<K, unknown>
+    : never;
+
+export type AsMapWithValue<I extends Iterable<any>, V> = I extends Iterable<
+    infer T
+>
+    ? T extends EntryLikeKey<infer K>
+        ? ReadonlyMap<K, V>
+        : ReadonlyMap<unknown, V>
+    : never;
+
+export type ToMap<I extends Iterable<any>> = I extends Iterable<infer T>
+    ? T extends EntryLike<infer K, infer V>
+        ? Map<K, V>
+        : T extends EntryLikeKey<infer K>
+        ? Map<K, unknown>
+        : T extends EntryLikeValue<infer V>
+        ? Map<unknown, V>
+        : Map<unknown, unknown>
+    : never;
+
+export type ToMapWithKey<I extends Iterable<any>, K> = I extends Iterable<
+    infer T
+>
+    ? T extends EntryLikeValue<infer V>
+        ? Map<K, V>
+        : Map<K, unknown>
+    : never;
+
+export type ToMapWithValue<I extends Iterable<any>, V> = I extends Iterable<
+    infer T
+>
+    ? T extends EntryLikeKey<infer K>
+        ? Map<K, V>
+        : Map<unknown, V>
+    : never;
+
+//TODO DOCS
+export function asMap<T>(collection: Iterable<T>): AsMap<Iterable<T>>;
+
+export function asMap<T, K>(
     collection: Iterable<T>,
     keySelector: (value: T, index: number) => K
-): ReadonlyMap<K, V>;
+): AsMapWithKey<Iterable<T>, K>;
+
+export function asMap<T, K>(
+    collection: Iterable<T>,
+    keySelector: (value: T, index: number) => K,
+    valueSelector: undefined
+): AsMapWithKey<Iterable<T>, K>;
 
 export function asMap<T extends EntryLikeKey<K>, K, V>(
     collection: Iterable<T>,
     keySelector: undefined,
     valueSelector: (value: T, index: number) => V
-): ReadonlyMap<K, V>;
+): AsMapWithValue<Iterable<T>, V>;
 
 export function asMap<T, K, V>(
     collection: Iterable<T>,
@@ -784,31 +913,36 @@ export function asMap<T, K, V>(
     collection: Iterable<T>,
     keySelector?: (value: T, index: number) => K,
     valueSelector?: (value: T, index: number) => V
-): Map<K, V> {
+): ReadonlyMap<any, any> {
     if (
-        collection instanceof Map &&
+        isMap(collection) &&
         keySelector === undefined &&
         valueSelector === undefined
-    )
+    ) {
         return collection;
-
-    return toMap(collection, keySelector as any, valueSelector as any);
+    } else {
+        return (toMap as Function)(collection, keySelector, valueSelector);
+    }
 }
 
-export function toMap<T extends EntryLike<K, V>, K, V>(
-    collection: Iterable<T>
-): Map<K, V>;
+export function toMap<T>(collection: Iterable<T>): ToMap<Iterable<T>>;
 
-export function toMap<T extends EntryLikeValue<V>, K, V>(
+export function toMap<T, K>(
     collection: Iterable<T>,
     keySelector: (value: T, index: number) => K
-): Map<K, V>;
+): ToMapWithKey<Iterable<T>, K>;
 
-export function toMap<T extends EntryLikeKey<K>, K, V>(
+export function toMap<T, K>(
+    collection: Iterable<T>,
+    keySelector: (value: T, index: number) => K,
+    valueSelector: undefined
+): ToMapWithKey<Iterable<T>, K>;
+
+export function toMap<T, V>(
     collection: Iterable<T>,
     keySelector: undefined,
     valueSelector: (value: T, index: number) => V
-): Map<K, V>;
+): ToMapWithValue<Iterable<T>, V>;
 
 export function toMap<T, K, V>(
     collection: Iterable<T>,
@@ -820,7 +954,7 @@ export function toMap<T, K, V>(
     collection: Iterable<T>,
     keySelector?: (value: T, index: number) => K,
     valueSelector?: (value: T, index: number) => V
-): Map<K, V> {
+): Map<any, any> {
     const map = new Map<K, V>();
     const keyS = keySelector ?? (value => (value as any)?.[0]);
     const valueS = valueSelector ?? (value => (value as any)?.[1]);
@@ -943,7 +1077,7 @@ export function generate<T>(
         for (let i = 0; i < usableLength; i++) yield from(i);
     });
 }
-
+//TODO DOCS
 export function including<T>(
     collection: Iterable<T>,
     other: Iterable<T>
@@ -1049,7 +1183,7 @@ export function groupJoin<O, I, K, R>(
     } else {
         // nonstandard comparison, O(n^2)
         return iter(function* () {
-            const innerCached = lazyCacheIterable(inner);
+            const innerCached = [...inner];
 
             for (const outerValue of outer) {
                 const innerGroup: I[] = [];
@@ -1093,7 +1227,7 @@ export function join<O, I, K, R>(
     } else {
         // nonstandard comparison, O(n^2)
         return iter(function* () {
-            const innerCached = lazyCacheIterable(inner);
+            const innerCached = [...inner];
             for (const outerValue of outer) {
                 for (const innerValue of innerCached) {
                     if (comparison(outerValue, innerValue)) {
@@ -1110,7 +1244,7 @@ export function leftJoin<O, I, K, R>(
     right: Iterable<I>,
     leftKeySelector: (value: O) => K,
     innerKeySelector: (value: I) => K,
-    resultSelector: ((left: O, right: I) => R) & ((left:O) => R),
+    resultSelector: ((left: O, right: I) => R) & ((left: O) => R),
     comparison?: (left: O, right: I) => boolean
 ): Iterable<R> {
     if (comparison === undefined) {
@@ -1126,14 +1260,14 @@ export function leftJoin<O, I, K, R>(
                         yield resultSelector(leftValue, innerValue);
                     }
                 } else {
-                    yield resultSelector(leftValue)
+                    yield resultSelector(leftValue);
                 }
             }
         });
     } else {
         // nonstandard comparison, O(n^2)
         return iter(function* () {
-            const rightCached = lazyCacheIterable(right);
+            const rightCached = [...right];
 
             for (const leftValue of left) {
                 let matchFound = false;
@@ -1144,14 +1278,13 @@ export function leftJoin<O, I, K, R>(
                     }
                 }
 
-                if (!matchFound){
+                if (!matchFound) {
                     yield resultSelector(leftValue);
                 }
             }
         });
     }
 }
-
 
 export function getNonIteratedCountOrUndefined(
     collection: Iterable<any>
@@ -1168,8 +1301,10 @@ export function distinct<T>(
     collection: Iterable<T>,
     identifier?: (value: T) => unknown
 ): Iterable<T> {
-    if (identifier == undefined && isSet(collection)) return collection;
-    if (identifier == undefined) identifier = value => value;
+    if (identifier === undefined) {
+        if (isSet(collection)) return collection;
+        identifier = value => value;
+    }
 
     return iter(function* () {
         const returned = new Set<unknown>();
@@ -1184,68 +1319,41 @@ export function distinct<T>(
     });
 }
 
+/**
+ * @returns The intersection of collections, a and b. That is, the values that are in both a and b based on {@link Object.is}. To make the output unique consider using {@link distinct}.
+ */
 export function intersection<T>(a: Iterable<T>, b: Iterable<T>): Iterable<T> {
-    return distinct(
-        iter(function* () {
-            let set: ReadonlySet<T>, iterable: Iterable<T>;
-
-            if (isSet(a) && isSet(b)) {
-                if (a.size > b.size) {
-                    set = a;
-                    iterable = b;
-                } else {
-                    set = b;
-                    iterable = a;
-                }
-            } else if (isSet(a)) {
-                set = a;
-                iterable = b;
-            } else if (isSet(b)) {
-                set = b;
-                iterable = a;
+    return iter(function* () {
+        // if either is a set
+        if (isSet(a) && isSet(b)) {
+            if (a.size > b.size) {
+                for (const value of b) if (a.has(value)) yield value;
             } else {
-                const sizeA = getNonIteratedCountOrUndefined(a);
-                const sizeB = getNonIteratedCountOrUndefined(b);
-                let other: Iterable<T>;
-                if (sizeA !== undefined && sizeB !== undefined) {
-                    if (sizeA > sizeB) {
-                        other = a;
-                        iterable = b;
-                    } else {
-                        other = b;
-                        iterable = a;
-                    }
+                for (const value of a) if (b.has(value)) yield value;
+            }
+        } else if (isSet(a)) {
+            for (const value of b) if (a.has(value)) yield value;
+        } else if (isSet(b)) {
+            for (const value of a) if (b.has(value)) yield value;
+        } else {
+            // if neither is a set
+
+            const cache = new Set<T>();
+            const iter = b[Symbol.iterator]();
+            let next: IteratorResult<T>;
+
+            for (const value of a) {
+                if (cache.has(value)) {
+                    yield value;
                 } else {
-                    other = b;
-                    iterable = a;
-                }
-                const iter = other[Symbol.iterator]();
-                let next;
-
-                const cache = new Set<T>();
-
-                for (const value of iterable) {
-                    if (cache.has(value)) yield value;
-
                     while (!(next = iter.next()).done) {
                         cache.add(next.value);
-                        if (Object.is(value, next.value)) {
-                            yield value;
-                            break;
-                        }
+                        if (Object.is(value, next.value)) yield value;
                     }
                 }
-
-                return;
             }
-
-            for (const value of iterable) if (set.has(value)) yield value;
-        })
-    );
-}
-
-export function union<T>(a: Iterable<T>, b: Iterable<T>): Iterable<T> {
-    return distinct(concat(a, b));
+        }
+    });
 }
 
 export function difference<T>(a: Iterable<T>, b: Iterable<T>): Iterable<T> {
@@ -1352,18 +1460,12 @@ export class Random {
 
 export const random = new Random();
 
-export function isSolid<T>(collection: Iterable<T>): collection is Solid<T> {
-    return (
-        Array.isArray(collection) ||
-        collection instanceof Set ||
-        collection instanceof Map
-    );
-}
-
 export type ReadonlySolid<T> =
     | readonly T[]
     | ReadonlySet<T>
-    | (T extends [infer K, infer V] ? ReadonlyMap<K, V> & Iterable<T> : never);
+    | (T extends EntryLike<infer K, infer V>
+          ? ReadonlyMap<K, V> & Iterable<T>
+          : never);
 
 export type Solid<T> =
     | T[]
@@ -1566,6 +1668,7 @@ export type ReduceAndFinalizeInfo = {
     readonly count: number;
 };
 
+//TODO DOCS
 export function reduceAndFinalize<T, F>(
     collection: Iterable<T>,
     reduction: (
@@ -1579,17 +1682,32 @@ export function reduceAndFinalize<T, F>(
 export function reduceAndFinalize<T, R, F>(
     collection: Iterable<T>,
     reduction: (previousResult: R, current: T, index: number) => R,
-    finalize: (result: R, info: ReduceAndFinalizeInfo) => F,
-    initialValue: R
+    initialValue: R,
+    finalize: (result: R, info: ReduceAndFinalizeInfo) => F
 ): F;
 
 export function reduceAndFinalize<T, F>(
     collection: Iterable<T>,
     reduction: (previousResult: any, current: T, index: number) => any,
-    finalize: (result: any, info: ReduceAndFinalizeInfo) => F,
-    initialValue?: any
+    initialValueOrFinalize: any,
+    finalize?: (result: any, info: ReduceAndFinalizeInfo) => F
 ) {
-    if (arguments.length > 3) {
+    if (arguments.length === 3) {
+        const finalize = initialValueOrFinalize as (
+            result: any,
+            info: ReduceAndFinalizeInfo
+        ) => F;
+
+        let count = 1;
+
+        const reduced = reduce(collection, (...args) => {
+            count++;
+            return reduction(...args);
+        });
+
+        return finalize(reduced, { count });
+    } else if (arguments.length === 4) {
+        const initialValue = initialValueOrFinalize;
         let count = 0;
 
         const reduced = reduce(
@@ -1601,16 +1719,9 @@ export function reduceAndFinalize<T, F>(
             initialValue
         );
 
-        return finalize(reduced, { count });
+        return finalize!(reduced, { count });
     } else {
-        let count = 1;
-
-        const reduced = reduce(collection, (...args) => {
-            count++;
-            return reduction(...args);
-        });
-
-        return finalize(reduced, { count });
+        throw new Error("incorrect number of arguments: " + arguments.length);
     }
 }
 
@@ -1767,5 +1878,20 @@ export function split<T>(
             }
         }
         yield chunk;
+    });
+}
+
+export function withIndex<T>(iterable: Iterable<T>): Iterable<[number, T]> {
+    return iter(function* () {
+        if (isArray(iterable)) {
+            for (let i = 0; i < iterable.length; i++) {
+                yield [i, iterable[i]!];
+            }
+        } else {
+            let i = 0;
+            for (const value of iterable) {
+                yield [i++, value];
+            }
+        }
     });
 }
