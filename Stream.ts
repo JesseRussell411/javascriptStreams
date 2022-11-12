@@ -509,6 +509,7 @@ export default class Stream<T> implements Iterable<T> {
      * Sorts the Stream from least to greatest using the given comparator function.
      */
     public orderBy(comparator: Comparator<T>): OrderedStream<T>;
+
     public orderBy(order: Order<T>): OrderedStream<T> {
         return new OrderedStream(this.getSource, [order], {
             count: this.sourceProperties.count,
@@ -523,6 +524,7 @@ export default class Stream<T> implements Iterable<T> {
      * Sorts the Stream from greatest to least using the given comparator function.
      */
     public orderByDescending(comparator: Comparator<T>): OrderedStream<T>;
+
     public orderByDescending(order: Order<T>): OrderedStream<T> {
         return this.orderBy(reverseOrder(order));
     }
