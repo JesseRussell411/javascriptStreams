@@ -204,5 +204,6 @@ async function main() {
         .reduce((t, c) => t + c);
 
     console.table({ vector1, vector2, dotProduct12 });
+    
 }
 main().catch(e => console.error(e));

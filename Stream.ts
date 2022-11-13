@@ -1600,28 +1600,43 @@ export default class Stream<T> implements Iterable<T> {
     /**
      * Counts how many values are in the Stream.
      * @returns The number of values in the Stream.
-     * */
-    public count(): number {
-        return this.sourceProperties.count ?? count(this.getSource());
+     */
+    public count(): number;
+
+    /**
+     * counts how many values in the Stream pass the given test.
+     * @returns The number of values that passed the test.
+     */
+    public count(test: (value: T, index: number) => boolean): number;
+
+    public count(test?: (value: T, index: number) => boolean): number {
+        if (test === undefined && this.sourceProperties.count !== undefined) {
+            return this.sourceProperties.count;
+        }
+
+        return count(this.getSource(), test);
     }
 
     /**
-     * @returns The single item in the Stream that passes the given test.
-     * @throws If no item passes the test or if more than one item passes the test.
+     * @returns The single item in the Stream that passes the given test or the default value if no items pass the test or if more than one item passes the test.
      */
-    public single(test: (value: T, index: number) => boolean): T {
+    public singleOrDefault<D>(
+        test: (value: T, index: number) => boolean,
+        getDefault: (reason: "none found" | "too many found") => D
+    ): T | D {
         let result: T | undefined = undefined;
         let found = false;
         let index = 0;
         for (const value of this) {
             if (test(value, index++)) {
-                if (found) throw new Error("more that one value found");
+                if (found) return getDefault("too many found");
                 found = true;
                 result = value;
             }
         }
+
         if (found) return result as T;
-        throw new Error("no value found");
+        return getDefault("none found");
     }
 
     /**
@@ -1630,19 +1645,21 @@ export default class Stream<T> implements Iterable<T> {
     public singleOrUndefined(
         test: (value: T, index: number) => boolean
     ): T | undefined {
-        let result: T | undefined = undefined;
-        let found = false;
-        let index = 0;
-        for (const value of this) {
-            if (test(value, index++)) {
-                if (found) return undefined;
-                found = true;
-                result = value;
-            }
-        }
+        return this.singleOrDefault(test, () => undefined);
+    }
 
-        if (found) return result as T;
-        return undefined;
+    /**
+     * @returns The single item in the Stream that passes the given test.
+     * @throws If no item passes the test or if more than one item passes the test.
+     */
+    public single(test: (value: T, index: number) => boolean): T {
+        return this.singleOrDefault(test, reason => {
+            if (reason === "none found") {
+                throw new Error("no value found");
+            } else {
+                throw new Error("more than one value found");
+            }
+        });
     }
 
     /**
@@ -1664,7 +1681,7 @@ export default class Stream<T> implements Iterable<T> {
     }
 
     /**
-     * Calls the given function with the Stream and return the Stream.
+     * Calls the given function with the Stream and then returns the Stream.
      */
     public inspect(inspector: (stream: this) => void): this {
         inspector(this);
@@ -1684,15 +1701,16 @@ export default class Stream<T> implements Iterable<T> {
         const otherSource = Stream.getSource(other);
 
         {
-            // try to found out if the sequences are of a different length
+            // try to find out if the sequences are of a different length (and therefor not equal)
             const count = getNonIteratedCountOrUndefined(source);
             const otherCount = getNonIteratedCountOrUndefined(otherSource);
             if (
                 count !== undefined &&
                 otherCount !== undefined &&
                 count !== otherCount
-            )
+            ) {
                 return false;
+            }
         }
 
         const iter = source[Symbol.iterator]();

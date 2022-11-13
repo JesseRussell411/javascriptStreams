@@ -482,14 +482,35 @@ export function indexOf<T>(
     return undefined;
 }
 
-export function count(collection: Iterable<any>): number {
-    if (Array.isArray(collection)) return collection.length;
-    if (collection instanceof Set) return collection.size;
-    if (collection instanceof Map) return collection.size;
+export function count<T>(
+    collection: Iterable<T>,
+    test?: (value: T, index: number) => boolean
+): number {
+    if (test === undefined) {
+        const maybeSize = getNonIteratedCountOrUndefined(collection);
+        
+        if (maybeSize !== undefined) {
+            return maybeSize;
+        } else {
+            let size = 0;
+            for (const _ of collection) size++;
+            return size;
+        }
+    } else {
+        let count = 0;
 
-    let size = 0;
-    for (const _ of collection) size++;
-    return size;
+        if (isArray(collection)) {
+            for (let i = 0; i < collection.length; i++) {
+                if (test(collection[i]!, i)) count++;
+            }
+        } else {
+            let i = 0;
+            for (const value of collection) {
+                if (test(value, i++)) count++;
+            }
+        }
+        return count;
+    }
 }
 
 export type ValueOf<T> = T[keyof T];
