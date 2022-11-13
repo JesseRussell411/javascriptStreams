@@ -4,7 +4,9 @@ import { StreamableArray } from "./Streamable";
 import { toASCII } from "punycode";
 import { isNumberObject } from "util/types";
 import { groupCollapsed } from "console";
+import { AsyncResource } from "async_hooks";
 
+type a = `${number}` extends "number" ? true : false;
 // TODO DOCS
 export function deepCopy<T>(object: T): T {
     if (typeof object === "object" && object !== null) {
@@ -425,25 +427,60 @@ export function lastOrDefault<T, D>(
 }
 
 /** @returns The value at the given index from the start of the given Iterable or the value at the given negative index from the end of the given Iterable (0 returns the first value, -1 returns the last value, -2 returns the second to last value, etc.).*/
+export function atOrDefault<T, D>(
+    collection: Iterable<T>,
+    index: number | bigint,
+    getDefault: () => D
+): T | D {
+    requireInteger(index);
+
+    if (isArray(collection)) {
+        if (index >= 0) {
+            if (index < collection.length) {
+                return collection[Number(index)]!;
+            } else {
+                return getDefault();
+            }
+        } else {
+            if (-index <= collection.length) {
+                return collection[collection.length + Number(index)]!;
+            } else {
+                return getDefault();
+            }
+        }
+    } else if (index < 0) {
+        const maybeSize = getNonIteratedCountOrUndefined(collection);
+        if (maybeSize !== undefined) {
+            if (-index <= maybeSize) {
+                const adjustedIndex = BigInt(maybeSize) + BigInt(index);
+
+                return atOrDefault(collection, adjustedIndex, getDefault);
+            } else {
+                return getDefault();
+            }
+        } else {
+            return atOrDefault([...collection], index, getDefault);
+        }
+    } else {
+        const maybeSize = getNonIteratedCountOrUndefined(collection);
+        if (maybeSize !== undefined && index >= maybeSize) return getDefault();
+
+        let i = 0n;
+        for (const value of collection) {
+            if (i++ >= index) {
+                return value;
+            }
+        }
+        return getDefault();
+    }
+}
+
+/** @returns The value at the given index from the start of the given Iterable or the value at the given negative index from the end of the given Iterable (0 returns the first value, -1 returns the last value, -2 returns the second to last value, etc.).*/
 export function at<T>(
     collection: Iterable<T>,
     index: number | bigint
 ): T | undefined {
-    if (isArray(collection)) {
-        const numberIndex = Math.trunc(Number(index));
-        if (numberIndex < 0) return collection[collection.length + numberIndex];
-        return collection[numberIndex];
-    } else {
-        const numberIndex = Number(index);
-        if (numberIndex < 0) {
-            const array = [...collection];
-            return array[array.length - numberIndex];
-        }
-        const bigintIndex = BigInt(index);
-
-        let i = 0n;
-        for (const value of collection) if (i++ >= bigintIndex) return value;
-    }
+    return atOrDefault(collection, index, () => undefined);
 }
 
 /** @returns An Iterable over the given Iterable in reverse order. */
@@ -488,7 +525,7 @@ export function count<T>(
 ): number {
     if (test === undefined) {
         const maybeSize = getNonIteratedCountOrUndefined(collection);
-        
+
         if (maybeSize !== undefined) {
             return maybeSize;
         } else {
@@ -512,6 +549,10 @@ export function count<T>(
         return count;
     }
 }
+
+// ------------------------------------------
+// utility types
+// -----------------------------------
 
 export type ValueOf<T> = T[keyof T];
 
@@ -571,6 +612,16 @@ export type IsLiteral<T> = IsStringLiteral<T> extends true
     ? true
     : false;
 
+export type ArrayOfLength<
+    Length extends number,
+    T = unknown,
+    Accumulator extends T[] = []
+> = IsNumberLiteral<Length> extends true
+    ? Accumulator["length"] extends Length
+        ? Accumulator
+        : ArrayOfLength<Length, T, [...Accumulator, T]>
+    : T[];
+
 export function asNumber(
     value: boolean | number | bigint | null | undefined
 ): number {
@@ -578,12 +629,10 @@ export function asNumber(
     return Number(value);
 }
 
-export type ObjectKey = number | string | symbol;
-
 export interface SmartCompareOptions {
     compareObjects?: (
-        a: Record<ObjectKey, any>,
-        b: Record<ObjectKey, any>
+        a: Record<keyof any, any>,
+        b: Record<keyof any, any>
     ) => number;
     compareArrays?: (a: readonly any[], b: readonly any[]) => number;
 }
@@ -844,13 +893,13 @@ export type DeLiteral<T> = T extends number
 
 export type EntryLike<K, V> =
     | [K, V, ...any]
-    | { 0: K; 1: V; [key: ObjectKey]: any };
+    | { 0: K; 1: V; [key: keyof any]: any };
 
-export type EntryLikeKey<K> = [K, ...any] | { 0: K; [key: ObjectKey]: any };
+export type EntryLikeKey<K> = [K, ...any] | { 0: K; [key: keyof any]: any };
 
 export type EntryLikeValue<V> =
     | [any, V, ...any]
-    | { 1: V; [key: ObjectKey]: any };
+    | { 1: V; [key: keyof any]: any };
 
 export type AsMap<I extends Iterable<any>> = I extends Iterable<infer T>
     ? T extends EntryLike<infer K, infer V>
@@ -902,6 +951,39 @@ export type ToMapWithValue<I extends Iterable<any>, V> = I extends Iterable<
     ? T extends EntryLikeKey<infer K>
         ? Map<K, V>
         : Map<unknown, V>
+    : never;
+
+export type ToObject<I extends Iterable<any>> = I extends Iterable<infer T>
+    ? T extends EntryLike<infer K, infer V>
+        ? K extends keyof any
+            ? Record<K, V>
+            : never
+        : T extends EntryLikeKey<infer K>
+        ? K extends keyof any
+            ? Record<K, unknown>
+            : never
+        : T extends EntryLikeValue<infer V>
+        ? Record<any, V>
+        : Record<any, unknown>
+    : never;
+
+export type ToObjectWithKey<
+    I extends Iterable<any>,
+    K extends keyof any
+> = I extends Iterable<infer T>
+    ? T extends EntryLikeValue<infer V>
+        ? Record<K, V>
+        : Record<K, unknown>
+    : never;
+
+export type ToObjectWithValue<I extends Iterable<any>, V> = I extends Iterable<
+    infer T
+>
+    ? T extends EntryLikeKey<infer K>
+        ? K extends keyof any
+            ? Record<K, V>
+            : Record<any, V>
+        : Record<any, unknown>
     : never;
 
 //TODO DOCS
@@ -987,6 +1069,47 @@ export function toMap<T, K, V>(
     }
 
     return map;
+}
+
+export function toObject<T>(collection: Iterable<T>): ToObject<Iterable<T>>;
+
+export function toObject<T, K extends keyof any>(
+    collection: Iterable<T>,
+    keySelector: (value: T, index: number) => K
+): ToObjectWithKey<Iterable<T>, K>;
+
+export function toObject<T, K extends keyof any>(
+    collection: Iterable<T>,
+    keySelector: (value: T, index: number) => K,
+    valueSelector: undefined
+): ToObjectWithKey<Iterable<T>, K>;
+
+export function toObject<T, V>(
+    collection: Iterable<T>,
+    keySelector: undefined,
+    valueSelector: (value: T, index: number) => V
+): ToObjectWithValue<Iterable<T>, V>;
+
+export function toObject<T, K extends keyof any, V>(
+    collection: Iterable<T>,
+    keySelector: (value: T, index: number) => K,
+    valueSelector: (value: T, index: number) => V
+): Record<K, V>;
+
+export function toObject<T, K extends keyof any, V>(
+    collection: Iterable<T>,
+    keySelector: (value: T, index: number) => K = v => (v as any)?.[0],
+    valueSelector: (value: T, index: number) => V = v => (v as any)?.[1]
+): Record<K, V> {
+    const object: Record<K, V> = {} as Record<K, V>;
+
+    let i = 0;
+    for (const value of collection) {
+        object[keySelector(value, i)] = valueSelector(value, i);
+        i++;
+    }
+
+    return object;
 }
 
 export function append<T>(collection: Iterable<T>, value: T): Iterable<T> {

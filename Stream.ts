@@ -2,6 +2,7 @@ import { groupCollapsed } from "console";
 import { ReadStream, ReadVResult } from "fs";
 import { userInfo } from "os";
 import { pathToFileURL } from "url";
+import { isModuleNamespaceObject } from "util/types";
 import { runInThisContext } from "vm";
 import now from "./javascriptStopwatch/now";
 import Stopwatch from "./javascriptStopwatch/stopwatch";
@@ -103,6 +104,12 @@ import {
     AsMap,
     AsMapWithKey,
     AsMapWithValue,
+    atOrDefault,
+    ToObject,
+    ToObjectWithKey,
+    ToObjectWithValue,
+    toObject,
+    ArrayOfLength,
 } from "./utils";
 
 // TODO maybe? rename to sequence or pipeline or river or creek or flow or drain or plumbing or stupid or Enumerable or iteration or enumeration or assemblyLine or conveyerBelt or relay or line or construction or structuredIteration or dataModel or flow or dataFlow or Fly or Fling or transformation or translation or shift or alteration or transmute or transition or conversion or morph or tabulation or beam or
@@ -370,7 +377,7 @@ export default class Stream<T> implements Iterable<T> {
 
         const self = this;
         return new Stream(
-            eager(
+            () =>
                 iter(function* () {
                     const cache: T[] = [];
 
@@ -383,8 +390,7 @@ export default class Stream<T> implements Iterable<T> {
                         i++;
                         for (; i < usableTimes; i++) yield* cache;
                     }
-                })
-            ),
+                }),
             {
                 immutable: this.sourceProperties.immutable,
                 count:
@@ -403,6 +409,7 @@ export default class Stream<T> implements Iterable<T> {
     public groupBy<K>(
         keySelector: (value: T, index: number) => K
     ): Stream<[K, T[]]>;
+
     /**
      * Groups the values in the Stream by the given key selector and then applying a mapping to the values using the value selector.
      * @param keySelector Specifies group to put each value in by the key it returns.
@@ -413,6 +420,7 @@ export default class Stream<T> implements Iterable<T> {
         keySelector: (value: T, index: number) => K,
         valueSelector: (value: T, index: number) => V
     ): Stream<[K, V[]]>;
+
     public groupBy<K>(
         keySelector: (value: T, index: number) => K,
         valueSelector: (value: T, index: number) => any = value => value
@@ -422,6 +430,24 @@ export default class Stream<T> implements Iterable<T> {
             {
                 oneOff: true,
             }
+        );
+    }
+
+    // TODO docs
+    public indexBy<K>(
+        keySelector: (value: T, index: number) => K
+    ): Stream<[K, T]> {
+        return new Stream(
+            () => {
+                const index = new Map<K, T>();
+
+                let i = 0;
+                for (const value of this)
+                    index.set(keySelector(value, i++), value);
+
+                return index;
+            },
+            { oneOff: true }
         );
     }
 
@@ -470,9 +496,10 @@ export default class Stream<T> implements Iterable<T> {
         right: Iterable<Right>,
         keySelector: (left: T) => Key,
         rightKeySelector: (right: Right) => Key,
-        resultSelector: ((left: T, right: Right) => Key) & ((left: T) => Key),
+        resultSelector: ((left: T, right: Right) => Result) &
+            ((left: T) => Result),
         comparison?: (left: T, right: Right) => boolean
-    ) {
+    ): Stream<Result> {
         return new Stream(() =>
             leftJoin(
                 this.getSource(),
@@ -482,22 +509,6 @@ export default class Stream<T> implements Iterable<T> {
                 resultSelector,
                 comparison
             )
-        );
-    }
-
-    // TODO docs
-    public indexBy<K>(keySelector: (value: T, index: number) => K) {
-        return new Stream(
-            () => {
-                const index = new Map<K, T>();
-
-                let i = 0;
-                for (const value of this)
-                    index.set(keySelector(value, i++), value);
-
-                return index;
-            },
-            { oneOff: true }
         );
     }
 
@@ -564,64 +575,11 @@ export default class Stream<T> implements Iterable<T> {
     }
 
     /**
-     * Takes every n value in the Stream.
-     * @param interval The interval on which to take. Defaults to 2.
-     */
-    public takeAlternating(interval: number | bigint = 2n): Stream<T> {
-        return new Stream(() => takeAlternating(this.getSource(), interval), {
-            immutable: this.sourceProperties.immutable,
-        });
-    }
-
-    /**
      * Skips every n value in the Stream.
      * @param interval The interval on which to skip. Defaults to 2.
      */
     public skipAlternating(interval: number | bigint = 2n): Stream<T> {
         return new Stream(() => skipAlternating(this.getSource(), interval), {
-            immutable: this.sourceProperties.immutable,
-        });
-    }
-
-    /**
-     * Iterates over the Stream, stopping at the first value to fail the test.
-     */
-    public takeWhile(test: (value: T, index: number) => boolean) {
-        return new Stream(() => takeWhile(this.getSource(), test));
-    }
-
-    /**
-     * Iterates over the Stream, starting at the first value to fail the test.
-     */
-    public skipWhile(test: (value: T, index: number) => boolean) {
-        return new Stream(() => skipWhile(this.getSource(), test));
-    }
-
-    /**
-     * Takes a number of values from the start of the Stream.
-     */
-    public take(count: number | bigint): Stream<T> {
-        return new Stream(() => take(this.getSource(), count), {
-            immutable: this.sourceProperties.immutable,
-        });
-    }
-
-    /**
-     * Skips a number of values from the start of the Stream.
-     */
-    public skip(count: number | bigint): Stream<T> {
-        return new Stream(() => skip(this.getSource(), count), {
-            immutable: this.sourceProperties.immutable,
-        });
-    }
-
-    /**
-     * Takes a specified number of values from the Stream, spread out from the start to the end.
-     * @param count How many values to take from the Stream.
-     * @returns A Stream of values spread out across the original Stream.
-     */
-    public takeSparse(count: number | bigint): Stream<T> {
-        return new Stream(() => takeSparse(this.getSource(), count), {
             immutable: this.sourceProperties.immutable,
         });
     }
@@ -638,11 +596,10 @@ export default class Stream<T> implements Iterable<T> {
     }
 
     /**
-     * Takes a number of random values from the Stream. The values to be taken are essentially taken without replacement. The same item is never taken twice.
+     * Iterates over the Stream, starting at the first value to fail the test.
      */
-    public takeRandom(count: number | bigint): Stream<T> {
-        requireInteger(requirePositive(count));
-        return this.shuffle().take(count);
+    public skipWhile(test: (value: T, index: number) => boolean) {
+        return new Stream(() => skipWhile(this.getSource(), test));
     }
 
     /**
@@ -651,6 +608,60 @@ export default class Stream<T> implements Iterable<T> {
     public skipRandom(count: number | bigint): Stream<T> {
         return new Stream(() => skipRandomToArray(this.getSource(), count), {
             oneOff: true,
+        });
+    }
+
+    /**
+     * Skips a number of values from the start of the Stream.
+     */
+    public skip(count: number | bigint): Stream<T> {
+        return new Stream(() => skip(this.getSource(), count), {
+            immutable: this.sourceProperties.immutable,
+        });
+    }
+
+    /**
+     * Takes every n value in the Stream.
+     * @param interval The interval on which to take. Defaults to 2.
+     */
+    public takeAlternating(interval: number | bigint = 2n): Stream<T> {
+        return new Stream(() => takeAlternating(this.getSource(), interval), {
+            immutable: this.sourceProperties.immutable,
+        });
+    }
+
+    /**
+     * Takes a specified number of values from the Stream, spread out from the start to the end.
+     * @param count How many values to take from the Stream.
+     * @returns A Stream of values spread out across the original Stream.
+     */
+    public takeSparse(count: number | bigint): Stream<T> {
+        return new Stream(() => takeSparse(this.getSource(), count), {
+            immutable: this.sourceProperties.immutable,
+        });
+    }
+
+    /**
+     * Iterates over the Stream, stopping at the first value to fail the test.
+     */
+    public takeWhile(test: (value: T, index: number) => boolean) {
+        return new Stream(() => takeWhile(this.getSource(), test));
+    }
+
+    /**
+     * Takes a number of random values from the Stream. The values to be taken are essentially taken without replacement. The same item is never taken twice.
+     */
+    public takeRandom(count: number | bigint): Stream<T> {
+        requireInteger(requirePositive(count));
+        return this.shuffle().take(count);
+    }
+
+    /**
+     * Takes a number of values from the start of the Stream.
+     */
+    public take(count: number | bigint): Stream<T> {
+        return new Stream(() => take(this.getSource(), count), {
+            immutable: this.sourceProperties.immutable,
         });
     }
 
@@ -701,7 +712,10 @@ export default class Stream<T> implements Iterable<T> {
      * @param other What to insert.
      * @param at Where to insert. Must be 0 or greater.
      */
-    public insert<O>(other: Iterable<O>, at: number | bigint): Stream<T | O> {
+    public insertAll<O>(
+        other: Iterable<O>,
+        at: number | bigint
+    ): Stream<T | O> {
         requireInteger(requirePositive(at));
         const usableAt = BigInt(at);
         // TODO add upper bound.
@@ -739,7 +753,7 @@ export default class Stream<T> implements Iterable<T> {
      * @param value What to insert.
      * @param at Where to insert. Must be 0 or greater.
      */
-    public insertValue(value: T, at: number | bigint) {
+    public insert(value: T, at: number | bigint) {
         //TODO add upper bound
         //TODO insert from end if it is negative
         requireInteger(requirePositive(at));
@@ -867,11 +881,28 @@ export default class Stream<T> implements Iterable<T> {
     }
 
     /**
+     * Removes all the values found in the given Iterable from the Stream. Essentially performing a difference operation between the Stream and the given Iterable.
+     * @param toRemove What not to include in the returned stream.
+     * @returns A Stream of all the values in the original Stream that are not found in the given Iterable (essentially original Stream - given Iterable).
+     */
+    public without(toRemove: Iterable<T>): Stream<T> {
+        return new Stream(
+            () => excluding(this.getSource(), Stream.getSource(toRemove)),
+            {
+                immutable:
+                    toRemove instanceof Stream &&
+                    this.sourceProperties.immutable &&
+                    toRemove.sourceProperties.immutable,
+            }
+        );
+    }
+
+    /**
      * Appends the values from the given Iterable to the end of the Stream if they aren't already in the Stream. Essentially performing a union operation between the Stream and the given Iterable.
      * @param needed
      * @returns
      */
-    public with(needed: Iterable<T>): Stream<T> {
+    public union(needed: Iterable<T>): Stream<T> {
         return new Stream(
             () => including(this.getSource(), Stream.getSource(needed)),
             {
@@ -883,25 +914,8 @@ export default class Stream<T> implements Iterable<T> {
         );
     }
 
-    /**
-     * Removes all the values found in the given Iterable from the Stream. Essentially performing a difference operation between the Stream and the given Iterable.
-     * @param remove What not to include in the returned stream.
-     * @returns A Stream of all the values in the original Stream that are not found in the given Iterable (essentially original Stream - given Iterable).
-     */
-    public without(remove: Iterable<T>): Stream<T> {
-        return new Stream(
-            () => excluding(this.getSource(), Stream.getSource(remove)),
-            {
-                immutable:
-                    remove instanceof Stream &&
-                    this.sourceProperties.immutable &&
-                    remove.sourceProperties.immutable,
-            }
-        );
-    }
-
     /** Keeps only the values that are in both the Stream and the given Iterable */
-    public intersect(other: Iterable<T>): Stream<T> {
+    public intersection(other: Iterable<T>): Stream<T> {
         return new Stream(
             () => intersection(this.getSource(), Stream.getSource(other)),
             {
@@ -916,10 +930,12 @@ export default class Stream<T> implements Iterable<T> {
     // TODO docs
     public looseMerge<O>(other: Iterable<O>): Stream<[T, O]>;
     // TODO docs
+
     public looseMerge<O, R>(
         other: Iterable<O>,
         merger: (t: T | undefined, o: O | undefined) => R
     ): Stream<R>;
+
     public looseMerge<O>(
         other: Iterable<O>,
         merger: (t: T | undefined, o: O | undefined) => any = (t, o) => [t, o]
@@ -943,11 +959,13 @@ export default class Stream<T> implements Iterable<T> {
 
     // TODO docs
     public merge<O>(other: Iterable<O>): Stream<[T, O]>;
+
     // TODO docs
     public merge<O, R>(
         other: Iterable<O>,
         merger: (t: T, o: O) => R
     ): Stream<R>;
+
     public merge<O>(
         other: Iterable<O>,
         merger: (t: T, o: O) => any = (t, o) => [t, o]
@@ -1020,7 +1038,7 @@ export default class Stream<T> implements Iterable<T> {
         target: number | bigint,
         start: number | bigint,
         end: number | bigint | undefined
-    ) {
+    ): Stream<T> {
         const usableTarget = Number(target);
         const usableStart = Number(start);
         const usableEnd = end === undefined ? undefined : Number(end);
@@ -1053,7 +1071,9 @@ export default class Stream<T> implements Iterable<T> {
      *
      * @param size Must be a whole number of 1 or greater. How big to make the partitions. Note that the last partition will be smaller than this if the Stream runs out of items before it can be completely filled.
      */
-    public partition(size: number | bigint) {
+    public partition<S extends number | bigint>(
+        size: S
+    ): Stream<S extends number ? ArrayOfLength<S, T> : T[]> {
         requirePositive(requireInteger(size));
         if (size === 0 || size === 0n)
             throw new Error("size must be greater than 0");
@@ -1073,7 +1093,7 @@ export default class Stream<T> implements Iterable<T> {
 
                 yield partition;
             }
-        });
+        }) as any;
     }
 
     /**
@@ -1189,6 +1209,43 @@ export default class Stream<T> implements Iterable<T> {
         } else {
             return (toMap as Function)(source, keySelector, valueSelector);
         }
+    }
+
+    // TODO DOCS
+    public toObject(): ToObject<Iterable<T>>;
+
+    // TODO DOCS
+    public toObject<K extends keyof any>(
+        keySelector: (value: T, index: number) => K
+    ): ToObjectWithKey<Iterable<T>, K>;
+
+    // TODO DOCS
+    public toObject<K extends keyof any>(
+        keySelector: (value: T, index: number) => K,
+        valueSelector: undefined
+    ): ToObjectWithKey<Iterable<T>, K>;
+
+    // TODO DOCS
+    public toObject<V>(
+        keySelector: undefined,
+        valueSelector: (value: T, index: number) => V
+    ): ToObjectWithValue<Iterable<T>, V>;
+
+    // TODO DOCS
+    public toObject<K extends keyof any, V>(
+        keySelector: (value: T, index: number) => K,
+        valueSelector: (value: T, index: number) => V
+    ): Record<K, V>;
+
+    public toObject<K extends keyof any, V>(
+        keySelector?: (value: T, index: number) => K,
+        valueSelector?: (value: T, index: number) => V
+    ): Record<K, V> {
+        return (toObject as Function)(
+            this.getSource(),
+            keySelector,
+            valueSelector
+        );
     }
 
     // TODO docs
@@ -1447,30 +1504,6 @@ export default class Stream<T> implements Iterable<T> {
         }) as any;
     }
 
-    /** @returns The first value to pass the test or undefined if one wasn't found. */
-    public find(test: (value: T, index: number) => boolean): T | undefined {
-        const source = this.getSource();
-        if (isArray(source)) {
-            return source.find(test);
-        } else {
-            let index = 0;
-            for (const value of source) if (test(value, index++)) return value;
-            return undefined;
-        }
-    }
-
-    /** @returns The last value to pass the test or undefined if one wasn't found. */
-    public findLast(test: (value: T, index: number) => boolean): T | undefined {
-        let index = 0;
-        let last: T | undefined = undefined;
-
-        for (const value of this) {
-            if (test(value, index++)) last = value;
-        }
-
-        return last;
-    }
-
     /**
      * @returns The first value to pass the test or the default value if one wasn't found.
      * @param test
@@ -1487,59 +1520,55 @@ export default class Stream<T> implements Iterable<T> {
         return getDefault();
     }
 
-    /** @returns The index of the first value to pass the test or undefined if one wasn't found. */
-    public findIndex(
-        test: (value: T, index: number) => boolean
-    ): number | undefined {
+    /** @returns The first value to pass the test or undefined if one wasn't found. */
+    public find(test: (value: T, index: number) => boolean): T | undefined {
+        return this.findOrDefault(test, () => undefined);
+    }
+
+    /** @returns The last value to pass the test or the default value if one wasn't found. */
+    public findLastOrDefault<D>(
+        test: (value: T, index: number) => boolean,
+        getDefault: () => D
+    ): T | D {
         let index = 0;
+        let last: T;
+        let found = false;
+
         for (const value of this) {
-            if (test(value, index)) return index;
-            index++;
+            if (test(value, index++)) {
+                found = true;
+                last = value;
+            }
         }
-        return undefined;
-    }
 
-    /** @returns The index of the last value to pass the test or undefined if one wasn't found. */
-    public findLastIndex(
-        test: (value: T, index: number) => boolean
-    ): number | undefined {
-        let index = 0;
-        let result: number | undefined = undefined;
-        for (const value of this) {
-            if (test(value, index)) result = index;
-            index++;
+        if (found) {
+            return last!;
+        } else {
+            return getDefault();
         }
-        return result;
     }
 
-    /** @returns The first index of the given value or undefined if the value isn't found. */
-    public indexOf(value: T, fromIndex?: number | bigint): number | undefined {
-        return indexOf(this.getSource(), value, fromIndex);
+    /** @returns The last value to pass the test or undefined if one wasn't found. */
+    public findLast(test: (value: T, index: number) => boolean): T | undefined {
+        return this.findLastOrDefault(test, () => undefined);
     }
 
-    /** @returns The last index of the given value or undefined if the value isn't found. */
-    public lastIndexOf(
-        value: T,
-        fromIndex?: number | bigint
-    ): number | undefined {
-        const lastIndex = this.toArray().lastIndexOf(
-            value,
-            fromIndex === undefined ? undefined : Number(fromIndex)
-        );
-
-        if (lastIndex === -1) return undefined;
-        return lastIndex;
-    }
-
-    /** @returns The first value in the Stream or undefined if the Stream is empty. */
-    public firstOrUndefined(): T | undefined {
-        for (const value of this) return value;
-        return undefined;
+    /** @returns The last value in the Stream or the default value if the Stream is empty. */
+    public lastOrDefault<D>(getDefault: () => D): T | D {
+        return lastOrDefault(this.getSource(), getDefault);
     }
 
     /** @returns The last value in the Stream or undefined if the Stream is empty. */
     public lastOrUndefined(): T | undefined {
         return lastOrUndefined(this.getSource());
+    }
+
+    /**
+     * @returns The last value in the Stream.
+     * @throws If the Stream is empty.
+     */
+    public last(): T {
+        return last(this.getSource());
     }
 
     /** @returns The first value in the Stream or the default value if the Stream is empty. */
@@ -1548,9 +1577,10 @@ export default class Stream<T> implements Iterable<T> {
         return getDefault();
     }
 
-    /** @returns The last value in the Stream or the default value if the Stream is empty. */
-    public lastOrDefault<D>(getDefault: () => D): T | D {
-        return lastOrDefault(this.getSource(), getDefault);
+    /** @returns The first value in the Stream or undefined if the Stream is empty. */
+    public firstOrUndefined(): T | undefined {
+        for (const value of this) return value;
+        return undefined;
     }
 
     /**
@@ -1563,22 +1593,15 @@ export default class Stream<T> implements Iterable<T> {
     }
 
     /**
-     * @returns The last value in the Stream.
-     * @throws If the Stream is empty.
-     */
-    public last(): T {
-        return last(this.getSource());
-    }
-
-    /**
      * @returns A random value from the Stream.
      * @throws If the Stream is empty.
      */
     public random(): T;
 
     /**
-     * @returns A Stream of non-unique random values from the original Stream. If the original Stream is empty, an empty Stream is returned regardless of the count requested.
-     * @param count How many random values the returned Stream will have.
+     * @returns A Stream of non-unique random values from the original Stream. Non-unique meaning that values are selected with replacement.
+     * If the original Stream is empty, an empty Stream is returned regardless of the count requested.
+     * @param count How many random values the returned Stream will have, unless the original Stream is empty.
      */
     public random(count: number | bigint): Stream<T>;
 
@@ -1592,8 +1615,13 @@ export default class Stream<T> implements Iterable<T> {
     }
 
     /** @returns The value at the given index or the value at the given negative index from the end of the Stream (-1 returns the last value, -2 returns the second to last value, etc.).*/
+    public atOrDefault<D>(index: number | bigint, getDefault: () => D): T | D {
+        return atOrDefault(this.getSource(), index, getDefault);
+    }
+
+    // TODO improve docs
+    /** @returns The value at the given index or the value at the given negative index from the end of the Stream (-1 returns the last value, -2 returns the second to last value, etc.).*/
     public at(index: number | bigint) {
-        requireInteger(index);
         return at(this.getSource(), index);
     }
 
@@ -1789,8 +1817,10 @@ export default class Stream<T> implements Iterable<T> {
 
     // TODO docs
     public toString() {
+        // TODO maybe limit this so it doesn't softlock on infinite streams.
         return this.mkString(",");
     }
+
     // TODO docs
     public toJSON() {
         return this.asArray();
@@ -1882,7 +1912,8 @@ export class OrderedStream<T> extends Stream<T> {
 // TODO docs
 export class MappedStream<Source, Result> extends Stream<Result> {
     private readonly originalGetSource: () => Iterable<Source>;
-
+    /** Whether any of the mapping functions have an index parameter. */
+    private readonly indexNeeded: boolean;
     private readonly mappings:
         | readonly [(value: Source, index: number) => Result]
         | readonly [
@@ -1890,6 +1921,7 @@ export class MappedStream<Source, Result> extends Stream<Result> {
               ...((value: any, index: number) => any)[],
               (value: any, index: number) => Result
           ];
+
     public constructor(
         getSource: () => Iterable<Source>,
         mappings:
@@ -1904,48 +1936,65 @@ export class MappedStream<Source, Result> extends Stream<Result> {
         super(
             () =>
                 map(getSource(), (value, index) => {
-                    let result = mappings[0]!(value, index);
-                    for (let i = 1; i < mappings.length; i++)
-                        result = mappings[i]!(result, index);
-                    return result;
+                    return this.applyMappings(value, index);
                 }),
-            { count: sourceProperties.count }
+            {
+                count: sourceProperties.count,
+                immutable: mappings.length === 0 && sourceProperties.immutable,
+            }
         );
         this.originalGetSource = getSource;
         this.mappings = mappings;
+        this.indexNeeded = this.mappings.some(m => m.length > 1);
+    }
+
+    private applyMappings(value: Source, index: number): Result {
+        let result: any = value;
+        for (let i = 0; i < this.mappings.length; i++) {
+            result = this.mappings[i]!(result, index);
+        }
+
+        return result;
     }
 
     public map<NewResult>(
         mapping: (value: Result, index: number) => NewResult
     ): MappedStream<Source, NewResult> {
-        return new MappedStream(this.originalGetSource, [
-            ...this.mappings,
-            mapping,
-        ]);
+        return new MappedStream(
+            this.originalGetSource,
+            [...this.mappings, mapping],
+            { count: this.sourceProperties.count }
+        );
+    }
+
+    public atOrDefault<D>(
+        index: number | bigint,
+        getDefault: () => D
+    ): Result | D {
+        let outOfBounds = false;
+        const sourceValue = atOrDefault(this.originalGetSource(), index, () => {
+            outOfBounds = true;
+        });
+
+        if (!outOfBounds) {
+            return this.applyMappings(sourceValue!, Number(index));
+        } else {
+            return getDefault();
+        }
     }
 
     public at(index: number | bigint): Result | undefined {
-        const indexAsNumber = Number(index);
-
-        const array = asArray(this.originalGetSource());
-        if (indexAsNumber >= array.length) return undefined;
-        if (indexAsNumber < 0 && array.length + indexAsNumber < 0)
-            return undefined;
-
-        const sourceValue =
-            array[
-                indexAsNumber < 0 ? array.length + indexAsNumber : indexAsNumber
-            ]!;
-
-        let result: any = this.mappings[0](sourceValue, indexAsNumber);
-        for (let i = 1; i < this.mappings.length; i++)
-            result = this.mappings[i]!(result, indexAsNumber);
-
-        return result;
+        return this.atOrDefault(index, () => undefined);
     }
 
-    public count(): number {
-        return this.sourceProperties.count ?? count(this.originalGetSource());
+    public count(test?: (value: Result, index: number) => boolean): number {
+        if (test === undefined) {
+            return (
+                this.sourceProperties.count ?? count(this.originalGetSource())
+            );
+        } else {
+            return super.count(test);
+        }
     }
 
     public getNonIteratedCountOrUndefined(): number | undefined {
@@ -1955,88 +2004,99 @@ export class MappedStream<Source, Result> extends Stream<Result> {
         );
     }
 
-    // TODO figure out a way to provide the correct index argument to the mapping function in these methods
-    // public takeAlternating(
-    //     interval: number | bigint = 2n
-    // ): MappedStream<Source, Result> {
-    //     requireInteger(requirePositive(interval));
-    //     return new MappedStream(
-    //         () => takeAlternating(this.originalGetSource(), interval),
-    //         this.mappings
-    //     );
-    // }
+    public takeAlternating(interval: number | bigint = 2n): Stream<Result> {
+        if (this.indexNeeded) return super.takeAlternating(interval);
 
-    // public skipAlternating(
-    //     interval: number | bigint = 2n
-    // ): MappedStream<Source, Result> {
-    //     requireInteger(requirePositive(interval));
-    //     return new MappedStream(
-    //         () => skipAlternating(this.originalGetSource(), interval),
-    //         this.mappings
-    //     );
-    // }
+        requireInteger(requirePositive(interval));
+        return new MappedStream(
+            () => takeAlternating(this.originalGetSource(), interval),
+            this.mappings
+        );
+    }
 
-    // public takeSparse(count: number | bigint): MappedStream<Source, Result> {
-    //     requireInteger(requirePositive(count));
-    //     return new MappedStream(
-    //         () => takeSparse(this.originalGetSource(), count),
-    //         this.mappings,
-    //         { ...this.sourceProperties, count: Number(count) }
-    //     );
-    // }
+    public skipAlternating(interval: number | bigint = 2n): Stream<Result> {
+        if (this.indexNeeded) return super.skipAlternating(interval);
 
-    // public skipSparse(count: number | bigint): MappedStream<Source, Result> {
-    //     requireInteger(requirePositive(count));
-    //     return new MappedStream(
-    //         () => skipSparse(this.originalGetSource(), count),
-    //         this.mappings,
-    //         this.sourceProperties
-    //     );
-    // }
+        requireInteger(requirePositive(interval));
+        return new MappedStream(
+            () => skipAlternating(this.originalGetSource(), interval),
+            this.mappings
+        );
+    }
 
-    // public takeRandom(count: number | bigint): MappedStream<Source, Result> {
-    //     requireInteger(requirePositive(count));
-    //     return new MappedStream(
-    //         () => takeRandom(this.originalGetSource(), count),
-    //         this.mappings
-    //     );
-    // }
+    public takeSparse(count: number | bigint): Stream<Result> {
+        if (this.indexNeeded) return super.takeSparse(count);
 
-    // public skipRandom(count: number | bigint): MappedStream<Source, Result> {
-    //     requireInteger(requirePositive(count));
-    //     return new MappedStream(
-    //         () => skipRandom(this.originalGetSource(), count),
-    //         this.mappings
-    //     );
-    // }
+        requireInteger(requirePositive(count));
+        return new MappedStream(
+            () => takeSparse(this.originalGetSource(), count),
+            this.mappings,
+            { ...this.sourceProperties, count: Number(count) }
+        );
+    }
 
-    // public skip(count: number | bigint): MappedStream<Source, Result> {
-    //     requireInteger(requirePositive(count));
-    //     return new MappedStream(
-    //         () => skip(this.originalGetSource(), count),
-    //         this.mappings
-    //     );
-    // }
+    public skipSparse(count: number | bigint): Stream<Result> {
+        if (this.indexNeeded) return super.skipSparse(count);
 
-    // public random(): Result;
+        requireInteger(requirePositive(count));
+        return new MappedStream(
+            () => skipSparse(this.originalGetSource(), count),
+            this.mappings,
+            this.sourceProperties
+        );
+    }
 
-    // public random(count: number | bigint): Stream<Result>;
+    public takeRandom(count: number | bigint): Stream<Result> {
+        if (this.indexNeeded) return super.takeRandom(count);
 
-    // public random(count?: number | bigint): Stream<Result> | Result {
-    //     if (count === undefined) {
-    //         const array = asArray(this.originalGetSource());
-    //         const index = random.int(0, array.length);
-    //         const sourceValue = array[index]!;
+        requireInteger(requirePositive(count));
+        return new MappedStream(
+            () => takeRandom(this.originalGetSource(), count),
+            this.mappings
+        );
+    }
 
-    //         let result: any = this.mappings[0](sourceValue, index);
-    //         for (let i = 1; i < this.mappings.length; i++)
-    //             result = this.mappings[i]!(result, index);
+    public skipRandom(count: number | bigint): Stream<Result> {
+        if (this.indexNeeded) return super.skipRandom(count);
 
-    //         return result;
-    //     } else {
-    //         return super.random(count);
-    //     }
-    // }
+        requireInteger(requirePositive(count));
+        return new MappedStream(
+            () => skipRandom(this.originalGetSource(), count),
+            this.mappings
+        );
+    }
+
+    public skip(count: number | bigint): Stream<Result> {
+        if (this.indexNeeded) return super.skip(count);
+
+        requireInteger(requirePositive(count));
+        return new MappedStream(
+            () => skip(this.originalGetSource(), count),
+            this.mappings
+        );
+    }
+
+    public random(): Result;
+
+    public random(count: number | bigint): Stream<Result>;
+
+    public random(count?: number | bigint): Stream<Result> | Result {
+        if (this.indexNeeded) return (super.random as Function)(count);
+
+        if (count === undefined) {
+            const array = asArray(this.originalGetSource());
+            const index = random.int(0, array.length);
+            const sourceValue = array[index]!;
+
+            let result: any = this.mappings[0](sourceValue, index);
+            for (let i = 1; i < this.mappings.length; i++)
+                result = this.mappings[i]!(result, index);
+
+            return result;
+        } else {
+            return super.random(count);
+        }
+    }
 }
 
 // TODO docs
@@ -2069,13 +2129,18 @@ class FilteredStream<
         this.filters = filters;
     }
 
-    public filter<NewR extends Result = Result>(
+    public filter<NewResult extends Result = Result>(
         test: (value: Result, index: number) => boolean
-    ): FilteredStream<Source, NewR> {
-        return new FilteredStream<Source, NewR>(this.originalGetSource, [
-            ...this.filters,
-            test,
-        ] as any);
+    ): Stream<NewResult> {
+        if (test.length > 1) {
+            // test needs an accurate index
+            return super.filter(test) as any;
+        } else {
+            return new FilteredStream<Source, NewResult>(
+                this.originalGetSource,
+                [...this.filters, test] as any
+            ) as any;
+        }
     }
 }
 

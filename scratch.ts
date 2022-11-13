@@ -204,6 +204,11 @@ async function main() {
         .reduce((t, c) => t + c);
 
     console.table({ vector1, vector2, dotProduct12 });
-    
+
+    const fas = Stream.from("aAbBcCdDeEfFgGhHiIjJ")
+        .partition(2)
+        .toObject(v => v[0].charCodeAt(0), undefined);
+
+    console.log(fas);
 }
 main().catch(e => console.error(e));
