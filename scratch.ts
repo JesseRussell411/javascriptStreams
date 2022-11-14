@@ -3,16 +3,13 @@ import fs from "fs/promises";
 import { StreamableArray } from "./Streamable";
 import {
     average,
-    breakSignal,
     DeLiteral,
     distinct,
     isArray,
-    KeyOfArray,
     lazy,
     random,
     range,
     split,
-    ValueOfArray,
 } from "./utils";
 import { inspect } from "util";
 import Stopwatch from "./javascriptStopwatch/stopwatch";
@@ -205,10 +202,9 @@ async function main() {
 
     console.table({ vector1, vector2, dotProduct12 });
 
-    const fas = Stream.from("aAbBcCdDeEfFgGhHiIjJ")
+    const afdadf = Stream.from("aBcDeEfFgGhHiIjJkKlLmMnNoOpPqQ")
         .partition(2)
-        .toObject(v => v[0].charCodeAt(0), undefined);
-
-    console.log(fas);
+        .toObject();
+    console.log(afdadf);
 }
 main().catch(e => console.error(e));

@@ -3,7 +3,7 @@ import { ValueOfStream } from "./Stream";
 import { getCustomers } from "./testData/customers";
 import { getProducts } from "./testData/products";
 import { getPurchases } from "./testData/purchases";
-import { ValueOfArray } from "./utils";
+import { ValueOf } from "./utils";
 
 async function main() {
     const [customerData, productData, purchaseData] = await Promise.all([
@@ -30,11 +30,11 @@ async function main() {
             })
         )
         .cache();
-    
-    console.log(inspect(customers.take(2).toArray(),false, null, true));
+
+    console.log(inspect(customers.take(2).toArray(), false, null, true));
 
     type Customer = ValueOfStream<typeof customers>;
-    type Product = ValueOfArray<Customer["purchases"]>;
+    type Product = ValueOf<Customer["purchases"]>;
 
     function simplifyCustomer(customer: Customer): {
         id: Customer["id"];
@@ -62,6 +62,7 @@ async function main() {
             .takeRandom(2)
             .asArray()
     );
+
     console.log();
     console.log();
     console.log();
@@ -86,11 +87,14 @@ async function main() {
             true
         )
     );
+
     console.log();
     console.log();
     console.log();
     console.log("Histogram of the number of purchases made per customer");
     console.log("---------------------------------------------------------");
+    console.log("               one customer -->  =");
+    console.log();
     {
         const grouped = customers
             .groupBy(c => c.purchases.length)
@@ -99,21 +103,21 @@ async function main() {
 
         const highestGroup = grouped.last();
 
-        console.log(
-            inspect(
-                grouped
-                    .map(
-                        group =>
-                            `${group[0]
-                                .toString()
-                                .padEnd(
-                                    highestGroup[0].toString().length + 1,
-                                    "-"
-                                )}|${"=".repeat(group[1].length)}`
-                    )
-                    .asArray()
+        const histogram = grouped
+            .map(
+                group =>
+                    `${group[0]
+                        .toString()
+                        .padEnd(
+                            highestGroup[0].toString().length + 1,
+                            "-"
+                        )}|${"=".repeat(group[1].length)}`
             )
-        );
+            .asArray();
+
+        for (const row of histogram) {
+            console.log(row);
+        }
     }
 }
 

@@ -178,28 +178,6 @@ export function filter<T>(
     }
 }
 
-export type BreakSignal = Symbol;
-/** Signal for breaking out of a loop. */
-export const breakSignal: BreakSignal = Symbol("break signal");
-
-export function forEach<T>(
-    collection: Iterable<T>,
-    callback: (value: T, index: number) => BreakSignal | void
-): void {
-    if (isArray(collection)) {
-        let index = 0;
-        // take advantage of faster iteration if possible
-        for (let i = 0; i < collection.length; i++) {
-            if (callback(collection[i]!, index++) === breakSignal) break;
-        }
-    } else {
-        let index = 0;
-        for (const value of collection) {
-            if (callback(value, index++) === breakSignal) break;
-        }
-    }
-}
-
 export function concat<A, B>(a: Iterable<A>, b: Iterable<B>): Iterable<A | B> {
     return iter(function* () {
         yield* a;
@@ -273,6 +251,8 @@ export function isSolid(value: any): boolean {
 export function asArray<T>(collection: Iterable<T>): readonly T[] {
     if (isArray(collection)) {
         return collection;
+    } else if (isStream(collection)) {
+        return collection.asArray();
     } else {
         return [...collection];
     }
@@ -281,6 +261,8 @@ export function asArray<T>(collection: Iterable<T>): readonly T[] {
 export function asSet<T>(collection: Iterable<T>): ReadonlySet<T> {
     if (isSet(collection)) {
         return collection;
+    } else if (isStream(collection)) {
+        return collection.asSet();
     } else {
         return new Set(collection);
     }
@@ -554,17 +536,14 @@ export function count<T>(
 // utility types
 // -----------------------------------
 
-export type ValueOf<T> = T[keyof T];
-
 export type Difference<T, Exclude> = T extends Exclude ? never : T;
 export type Intersection<A, B> = A extends B ? A : never;
 
-export type KeyOfArray<T extends readonly any[] | any[]> = Intersection<
-    keyof T,
-    number
->;
-
-export type ValueOfArray<T extends readonly any[] | any[]> = T[KeyOfArray<T>];
+export type ValueOf<T> = T extends (infer V)[]
+    ? V
+    : T extends Record<keyof any, infer V>
+    ? V
+    : T[keyof T];
 
 export type DigitCharacter =
     | "0"
@@ -579,11 +558,17 @@ export type DigitCharacter =
     | "9";
 export type IntCharacter = DigitCharacter | "-";
 export type NumberCharacter = IntCharacter | ".";
+
 export type WhitespaceCharacter = " " | "\n" | "\t" | "\r" | "\v" | "\f";
+
 export type IsWhitespaceOnly<T> = T extends WhitespaceCharacter
     ? true
     : T extends `${WhitespaceCharacter}${infer Rest}`
     ? IsWhitespaceOnly<Rest>
+    : false;
+
+export type IsNegative<N extends number | bigint> = `${N}` extends `-${infer _}`
+    ? true
     : false;
 
 export type Includes<
@@ -612,15 +597,17 @@ export type IsLiteral<T> = IsStringLiteral<T> extends true
     ? true
     : false;
 
-export type ArrayOfLength<
+export type TupleOfLength<
     Length extends number,
     T = unknown,
     Accumulator extends T[] = []
-> = IsNumberLiteral<Length> extends true
-    ? Accumulator["length"] extends Length
-        ? Accumulator
-        : ArrayOfLength<Length, T, [...Accumulator, T]>
-    : T[];
+> = IsNumberLiteral<Length> extends false
+    ? T[]
+    : IsNegative<Length> extends true
+    ? unknown
+    : Accumulator["length"] extends Length
+    ? Accumulator
+    : TupleOfLength<Length, T, [...Accumulator, T]>;
 
 export function asNumber(
     value: boolean | number | bigint | null | undefined
@@ -1101,7 +1088,7 @@ export function toObject<T, K extends keyof any, V>(
     keySelector: (value: T, index: number) => K = v => (v as any)?.[0],
     valueSelector: (value: T, index: number) => V = v => (v as any)?.[1]
 ): Record<K, V> {
-    const object: Record<K, V> = {} as Record<K, V>;
+    const object = {} as Record<K, V>;
 
     let i = 0;
     for (const value of collection) {
@@ -1219,32 +1206,6 @@ export function generate<T>(
     const usableLength = Number(length);
     return iter(function* () {
         for (let i = 0; i < usableLength; i++) yield from(i);
-    });
-}
-//TODO DOCS
-export function including<T>(
-    collection: Iterable<T>,
-    other: Iterable<T>
-): Iterable<T> {
-    return iter(function* () {
-        const remaining = new Set(other);
-        for (const value of collection) {
-            remaining.delete(value);
-            yield value;
-        }
-
-        yield* remaining;
-    });
-}
-
-export function excluding<T>(
-    collection: Iterable<T>,
-    other: Iterable<T>
-): Iterable<T> {
-    return iter(function* () {
-        const setOfExcluding = asSet(other);
-        for (const value of collection)
-            if (!setOfExcluding.has(value)) yield value;
     });
 }
 
@@ -1481,7 +1442,6 @@ export function intersection<T>(a: Iterable<T>, b: Iterable<T>): Iterable<T> {
             for (const value of a) if (b.has(value)) yield value;
         } else {
             // if neither is a set
-
             const cache = new Set<T>();
             const iter = b[Symbol.iterator]();
             let next: IteratorResult<T>;
@@ -1616,7 +1576,7 @@ export type Solid<T> =
     | Set<T>
     | (T extends [infer K, infer V] ? Map<K, V> & Iterable<T> : never);
 
-export function alternating<T>(
+export function takeAlternating<T>(
     collection: Iterable<T>,
     interval: number | bigint = 2n
 ): Iterable<T> {
@@ -1643,7 +1603,7 @@ export function alternating<T>(
     }
 }
 
-export function alternatingSkip<T>(
+export function skipAlternating<T>(
     collection: Iterable<T>,
     interval: number | bigint = 2n
 ): Iterable<T> {
@@ -1688,7 +1648,7 @@ export function takeSparse<T>(
     const solid = asSolid(collection);
     const sourceLength = getNonIteratedCount(solid);
     return take(
-        alternating(solid, BigInt(sourceLength) / usableCount),
+        takeAlternating(solid, BigInt(sourceLength) / usableCount),
         usableCount
     );
 }

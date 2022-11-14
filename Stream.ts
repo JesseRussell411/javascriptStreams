@@ -1,115 +1,83 @@
-import { groupCollapsed } from "console";
-import { ReadStream, ReadVResult } from "fs";
-import { userInfo } from "os";
-import { pathToFileURL } from "url";
-import { isModuleNamespaceObject } from "util/types";
-import { runInThisContext } from "vm";
 import now from "./javascriptStopwatch/now";
-import Stopwatch from "./javascriptStopwatch/stopwatch";
-import getStopwatchClass from "./javascriptStopwatch/stopwatch";
-import { and, or } from "./logic";
-import { Streamable, StreamableArray } from "./Streamable";
+import { and } from "./logic";
 import {
-    lazy,
-    iter,
-    partialCopy,
-    asArray,
-    asSet,
-    includes,
-    join,
-    isIterable,
-    breakSignal,
-    setAndGet,
-    isArray,
-    last,
-    at,
-    count,
-    smartCompare,
-    zipperMerge,
-    equalLengthZipperMerge as equalLengthZipperMerge,
-    DeLiteral,
-    SmartCompareOptions,
-    EntryLike,
-    EntryLikeValue,
-    EntryLikeKey,
-    asMap,
-    toMap,
-    isSet,
-    isMap,
-    multiCompare,
-    Comparator,
+    takeAlternating,
+    skipAlternating,
     append,
-    Order,
-    reverseOrder,
-    shuffled,
-    prepend,
-    range,
-    generate,
-    shuffle,
-    including,
-    excluding,
-    groupBy,
-    groupJoin,
-    getNonIteratedCountOrUndefined,
-    intersection,
-    random,
-    ReadonlySolid,
-    Solid,
-    isSolid,
-    asSolid,
-    alternating as takeAlternating,
-    getNonIteratedCount,
-    alternatingSkip as skipAlternating,
-    eager,
-    distinct,
-    map,
-    filter,
-    skipSparse,
-    takeSparse,
-    ValueOfArray,
-    IsWhitespaceOnly,
-    lazyCacheIterator,
-    lastOrUndefined,
-    lastOrDefault,
-    empty,
-    indexOf,
-    looseMerge as looseMerge,
-    merge,
-    lazyCacheIterable,
-    IsNumberLiteral,
-    IsBigIntLiteral,
-    IsStringLiteral,
-    concat,
-    skipRandomToArray,
-    take,
-    skipRandom,
-    takeRandom,
-    forEach,
-    BreakSignal,
-    ReduceAndFinalizeInfo,
-    reduce,
-    reduceAndFinalize,
-    requireInteger,
-    requirePositive,
-    split,
-    skip,
-    skipWhile,
-    takeWhile,
-    mkString,
-    leftJoin,
-    withIndex,
-    ToMap,
-    ToMapWithKey,
-    ToMapWithValue,
+    asArray,
+    asMap,
     AsMap,
     AsMapWithKey,
     AsMapWithValue,
+    asSet,
+    asSolid,
+    at,
     atOrDefault,
+    Comparator,
+    count,
+    DeLiteral,
+    distinct,
+    eager,
+    equalLengthZipperMerge,
+    filter,
+    generate,
+    getNonIteratedCount,
+    getNonIteratedCountOrUndefined,
+    groupBy,
+    groupJoin,
+    includes,
+    intersection,
+    IsBigIntLiteral,
+    isIterable,
+    isMap,
+    IsNumberLiteral,
+    isSolid,
+    IsStringLiteral,
+    iter,
+    join,
+    last,
+    lastOrDefault,
+    lastOrUndefined,
+    lazyCacheIterable,
+    leftJoin,
+    looseMerge,
+    map,
+    merge,
+    mkString,
+    multiCompare,
+    Order,
+    random,
+    range,
+    ReadonlySolid,
+    reduce,
+    reduceAndFinalize,
+    ReduceAndFinalizeInfo,
+    requireInteger,
+    requirePositive,
+    reverseOrder,
+    shuffle,
+    skip,
+    skipRandom,
+    skipRandomToArray,
+    skipSparse,
+    skipWhile,
+    smartCompare,
+    Solid,
+    split,
+    take,
+    takeRandom,
+    takeSparse,
+    takeWhile,
+    toMap,
+    ToMap,
+    ToMapWithKey,
+    ToMapWithValue,
     ToObject,
+    toObject,
     ToObjectWithKey,
     ToObjectWithValue,
-    toObject,
-    ArrayOfLength,
+    TupleOfLength,
+    zipperMerge,
 } from "./utils";
 
 // TODO maybe? rename to sequence or pipeline or river or creek or flow or drain or plumbing or stupid or Enumerable or iteration or enumeration or assemblyLine or conveyerBelt or relay or line or construction or structuredIteration or dataModel or flow or dataFlow or Fly or Fling or transformation or translation or shift or alteration or transmute or transition or conversion or morph or tabulation or beam or
@@ -297,15 +265,21 @@ export default class Stream<T> implements Iterable<T> {
 
     /**
      * Calls the callback on each value in the Stream. Like {@link Array.forEach}.
-     * @param callback What to call for each value. If {@link breakSignal} is returned, iteration is stopped.
-     * @returns The Stream.
+     * @param callback What to call for each value. If {@link Stream.breakSignal} is returned, iteration is stopped.
+     * @returns The Stream for chaining purposes.
      */
-    public forEach(
-        callback: (value: T, index: number) => BreakSignal | void
-    ): this {
-        forEach(this.getSource(), callback);
+    public forEach(callback: (value: T, index: number) => Symbol | void): this {
+        let i = 0;
+        for (const value of this.getSource()) {
+            if (callback(value, i++) === Stream.breakSignal) break;
+        }
         return this;
     }
+
+    /**
+     * Signals for a {@link Stream.forEach} loop to stop.
+     */
+    public static breakSignal: Symbol = Symbol("Stream break signal");
 
     /**
      * @param mapping The mapping function. Not guarantied to be run for every value in the Stream if not necessary.
@@ -574,6 +548,19 @@ export default class Stream<T> implements Iterable<T> {
         );
     }
 
+    // TODO add some kind of randomizer seed parameter
+    /** @returns A Stream over the original Stream in random order. */
+    public shuffle(): Stream<T> {
+        return new Stream(
+            () => {
+                const array = this.toArray();
+                shuffle(array);
+                return array;
+            },
+            { oneOff: true, count: this.sourceProperties.count }
+        );
+    }
+
     /**
      * Skips every n value in the Stream.
      * @param interval The interval on which to skip. Defaults to 2.
@@ -749,55 +736,6 @@ export default class Stream<T> implements Iterable<T> {
     }
 
     /**
-     * Inserts the value into the Stream at the given index.
-     * @param value What to insert.
-     * @param at Where to insert. Must be 0 or greater.
-     */
-    public insert(value: T, at: number | bigint) {
-        //TODO add upper bound
-        //TODO insert from end if it is negative
-        requireInteger(requirePositive(at));
-
-        const usableAt = BigInt(at);
-        const self = this;
-        return new Stream(
-            () =>
-                iter(function* () {
-                    const iter = self[Symbol.iterator]();
-                    let next;
-
-                    for (
-                        let i = 0n;
-                        i < usableAt && !(next = iter.next()).done;
-                        i++
-                    ) {
-                        yield next.value;
-                    }
-
-                    yield value;
-
-                    while (!(next = iter.next()).done) yield next.value;
-                }),
-            {
-                immutable: this.sourceProperties.immutable,
-                count: Stream.addCountOrUndefined(this, 1),
-            }
-        );
-    }
-
-    /**
-     * Removes duplicated values from the Stream.
-     */
-    public distinct(identifier?: (value: T) => any): Stream<T> {
-        return new Stream(() => distinct(this.getSource(), identifier), {
-            immutable:
-                this.sourceProperties.immutable && identifier === undefined
-                    ? true
-                    : undefined,
-        });
-    }
-
-    /**
      * Removes a number of values from the Stream. Similar to {@link Array.splice}.
      * @param start Where to start the removal.
      * @param deleteCount How many values to remove.
@@ -847,16 +785,40 @@ export default class Stream<T> implements Iterable<T> {
         );
     }
 
-    // TODO add some kind of randomizer seed parameter
-    /** @returns A Stream over the original Stream in random order. */
-    public shuffle(): Stream<T> {
+    /**
+     * Inserts the value into the Stream at the given index.
+     * @param value What to insert.
+     * @param at Where to insert. Must be 0 or greater.
+     */
+    public insert(value: T, at: number | bigint) {
+        //TODO add upper bound
+        //TODO insert from end if it is negative
+        requireInteger(requirePositive(at));
+
+        const usableAt = BigInt(at);
+        const self = this;
         return new Stream(
-            () => {
-                const array = this.toArray();
-                shuffle(array);
-                return array;
-            },
-            { oneOff: true, count: this.sourceProperties.count }
+            () =>
+                iter(function* () {
+                    const iter = self[Symbol.iterator]();
+                    let next;
+
+                    for (
+                        let i = 0n;
+                        i < usableAt && !(next = iter.next()).done;
+                        i++
+                    ) {
+                        yield next.value;
+                    }
+
+                    yield value;
+
+                    while (!(next = iter.next()).done) yield next.value;
+                }),
+            {
+                immutable: this.sourceProperties.immutable,
+                count: Stream.addCountOrUndefined(this, 1),
+            }
         );
     }
 
@@ -882,17 +844,24 @@ export default class Stream<T> implements Iterable<T> {
 
     /**
      * Removes all the values found in the given Iterable from the Stream. Essentially performing a difference operation between the Stream and the given Iterable.
-     * @param toRemove What not to include in the returned stream.
+     * @param other What not to include in the returned stream.
      * @returns A Stream of all the values in the original Stream that are not found in the given Iterable (essentially original Stream - given Iterable).
      */
-    public without(toRemove: Iterable<T>): Stream<T> {
+    public without(other: Iterable<T>): Stream<T> {
+        const self = this;
         return new Stream(
-            () => excluding(this.getSource(), Stream.getSource(toRemove)),
+            () =>
+                iter(function* () {
+                    const setOfExcluding = asSet(other);
+                    for (const value of self.getSource()) {
+                        if (!setOfExcluding.has(value)) yield value;
+                    }
+                }),
             {
                 immutable:
-                    toRemove instanceof Stream &&
+                    other instanceof Stream &&
                     this.sourceProperties.immutable &&
-                    toRemove.sourceProperties.immutable,
+                    other.sourceProperties.immutable,
             }
         );
     }
@@ -903,8 +872,18 @@ export default class Stream<T> implements Iterable<T> {
      * @returns
      */
     public union(needed: Iterable<T>): Stream<T> {
+        const self = this;
         return new Stream(
-            () => including(this.getSource(), Stream.getSource(needed)),
+            () =>
+                iter(function* () {
+                    const remaining = new Set(needed);
+                    for (const value of self.getSource()) {
+                        remaining.delete(value);
+                        yield value;
+                    }
+
+                    yield* remaining;
+                }),
             {
                 immutable:
                     needed instanceof Stream &&
@@ -925,6 +904,18 @@ export default class Stream<T> implements Iterable<T> {
                     other.sourceProperties.immutable,
             }
         );
+    }
+
+    /**
+     * Removes duplicated values from the Stream.
+     */
+    public distinct(identifier?: (value: T) => any): Stream<T> {
+        return new Stream(() => distinct(this.getSource(), identifier), {
+            immutable:
+                this.sourceProperties.immutable && identifier === undefined
+                    ? true
+                    : undefined,
+        });
     }
 
     // TODO docs
@@ -1073,9 +1064,9 @@ export default class Stream<T> implements Iterable<T> {
      */
     public partition<S extends number | bigint>(
         size: S
-    ): Stream<S extends number ? ArrayOfLength<S, T> : T[]> {
+    ): Stream<S extends number ? TupleOfLength<S, T> : T[]> {
         requirePositive(requireInteger(size));
-        if (size === 0 || size === 0n)
+        if (size <= 0 || size <= 0n)
             throw new Error("size must be greater than 0");
 
         const self = this;
@@ -1813,6 +1804,15 @@ export default class Stream<T> implements Iterable<T> {
                 } while (!(next = iter.next()).done);
             }
         });
+    }
+
+    public asString() {
+        const source = this.getSource();
+        if (typeof source === "string") {
+            return source;
+        } else {
+            return this.mkString();
+        }
     }
 
     // TODO docs
