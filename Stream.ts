@@ -18,7 +18,7 @@ import {
     DeLiteral,
     distinct,
     eager,
-    equalLengthZipperMerge,
+    zipperMerge,
     filter,
     generate,
     getNonIteratedCount,
@@ -77,7 +77,13 @@ import {
     ToObjectWithKey,
     ToObjectWithValue,
     TupleOfLength,
-    zipperMerge,
+    looseZipperMerge,
+    isSet,
+    concat,
+    Replace,
+    flat,
+    Flat,
+    ValueOf,
 } from "./utils";
 
 // TODO maybe? rename to sequence or pipeline or river or creek or flow or drain or plumbing or stupid or Enumerable or iteration or enumeration or assemblyLine or conveyerBelt or relay or line or construction or structuredIteration or dataModel or flow or dataFlow or Fly or Fling or transformation or translation or shift or alteration or transmute or transition or conversion or morph or tabulation or beam or
@@ -184,6 +190,35 @@ export default class Stream<T> implements Iterable<T> {
             return new Stream(source, {});
         } else {
             return new Stream(eager(source ?? []));
+        }
+    }
+
+    public static fromObject<K extends keyof any, V>(
+        source: Record<K, V> | (() => Record<K, V>)
+    ): Stream<[Replace<K, number, string>, V]> {
+        if (typeof source === "function") {
+            return new Stream(() =>
+                iter(function* () {
+                    const object = source();
+                    for (const key of concat(
+                        Object.getOwnPropertyNames(object),
+                        Object.getOwnPropertySymbols(object)
+                    ) as Iterable<Replace<K, number, string>>) {
+                        yield [key, object[key as K]];
+                    }
+                })
+            );
+        } else {
+            return new Stream(() =>
+                iter(function* () {
+                    for (const key of concat(
+                        Object.getOwnPropertyNames(source),
+                        Object.getOwnPropertySymbols(source)
+                    ) as Iterable<Replace<K, number, string>>) {
+                        yield [key, source[key as K]];
+                    }
+                })
+            );
         }
     }
 
@@ -395,12 +430,33 @@ export default class Stream<T> implements Iterable<T> {
         valueSelector: (value: T, index: number) => V
     ): Stream<[K, V[]]>;
 
+    // TODO DOCS
+    public groupBy<K, V, G>(
+        keySelector: (value: T, index: number) => K,
+        valueSelector: (value: T, index: number) => V,
+        groupSelector: (group: V[], key: K, index: number) => G
+    ): Stream<[K, G]>;
+
+    // TODO DOCS
+    public groupBy<K, G>(
+        keySelector: (value: T, index: number) => K,
+        valueSelector: undefined,
+        groupSelector: (group: T[], key: K, index: number) => G
+    ): Stream<[K, G]>;
+
     public groupBy<K>(
         keySelector: (value: T, index: number) => K,
-        valueSelector: (value: T, index: number) => any = value => value
-    ): Stream<[K, T[]]> {
+        valueSelector?: (value: T, index: number) => any,
+        groupSelector?: (group: any[], key: K, index: number) => any
+    ): Stream<[K, any]> {
         return new Stream(
-            () => groupBy(this.getSource(), keySelector, valueSelector),
+            () =>
+                (groupBy as Function)(
+                    this.getSource(),
+                    keySelector,
+                    valueSelector,
+                    groupSelector
+                ),
             {
                 oneOff: true,
             }
@@ -410,14 +466,30 @@ export default class Stream<T> implements Iterable<T> {
     // TODO docs
     public indexBy<K>(
         keySelector: (value: T, index: number) => K
-    ): Stream<[K, T]> {
+    ): Stream<[K, T]>;
+
+    //TODO DOCS
+    public indexBy<K, V>(
+        keySelector: (value: T, index: number) => K,
+        valueSelector: (value: T, index: number) => V
+    ): Stream<[K, V]>;
+
+    public indexBy<K>(
+        keySelector: (value: T, index: number) => K,
+        valueSelector: (value: T, index: number) => any = v => v
+    ): Stream<[K, any]> {
         return new Stream(
             () => {
                 const index = new Map<K, T>();
 
                 let i = 0;
-                for (const value of this)
-                    index.set(keySelector(value, i++), value);
+                for (const value of this) {
+                    const key = keySelector(value, i);
+                    if (!index.has(key)) {
+                        index.set(key, valueSelector(value, i));
+                    }
+                    i++;
+                }
 
                 return index;
             },
@@ -847,7 +919,7 @@ export default class Stream<T> implements Iterable<T> {
      * @param other What not to include in the returned stream.
      * @returns A Stream of all the values in the original Stream that are not found in the given Iterable (essentially original Stream - given Iterable).
      */
-    public without(other: Iterable<T>): Stream<T> {
+    public difference(other: Iterable<any>): Stream<T> {
         const self = this;
         return new Stream(
             () =>
@@ -871,12 +943,12 @@ export default class Stream<T> implements Iterable<T> {
      * @param needed
      * @returns
      */
-    public union(needed: Iterable<T>): Stream<T> {
+    public union<O>(needed: Iterable<O>): Stream<T | O> {
         const self = this;
         return new Stream(
             () =>
                 iter(function* () {
-                    const remaining = new Set(needed);
+                    const remaining = new Set<T | O>(needed);
                     for (const value of self.getSource()) {
                         remaining.delete(value);
                         yield value;
@@ -906,6 +978,51 @@ export default class Stream<T> implements Iterable<T> {
         );
     }
 
+    //TODO DOCS
+    public without(value: any): Stream<T> {
+        return new Stream(
+            () => {
+                const source = this.getSource();
+                if (isSet(source) && !source.has(value)) {
+                    return source;
+                } else {
+                    return iter(function* () {
+                        for (const sourceValue of source) {
+                            if (!Object.is(value, sourceValue)) {
+                                yield sourceValue;
+                            }
+                        }
+                    });
+                }
+            },
+            { immutable: this.sourceProperties.immutable }
+        );
+    }
+
+    //TODO DOcs
+    public with<O>(value: O): Stream<T | O> {
+        return new Stream(
+            () => {
+                const source = this.getSource();
+                if (isSet(source) && (source as Set<T | O>).has(value)) {
+                    return source;
+                } else {
+                    return iter(function* () {
+                        let found = false;
+                        for (const sourceValue of source) {
+                            if (!found && Object.is(value, sourceValue)) {
+                                found = true;
+                            }
+                            yield sourceValue;
+                        }
+                        if (!found) yield value;
+                    });
+                }
+            },
+            { immutable: this.sourceProperties.immutable }
+        ) as any;
+    }
+
     /**
      * Removes duplicated values from the Stream.
      */
@@ -919,7 +1036,9 @@ export default class Stream<T> implements Iterable<T> {
     }
 
     // TODO docs
-    public looseMerge<O>(other: Iterable<O>): Stream<[T, O]>;
+    public looseMerge<O>(
+        other: Iterable<O>
+    ): Stream<[T | undefined, O | undefined]>;
     // TODO docs
 
     public looseMerge<O, R>(
@@ -979,10 +1098,10 @@ export default class Stream<T> implements Iterable<T> {
     }
 
     /** Performs a zipper merge with the given Iterable. */
-    public zipperMerge<O>(other: Iterable<O>): Stream<T | O> {
+    public looseZipperMerge<O>(other: Iterable<O>): Stream<T | O> {
         const otherCount = getNonIteratedCountOrUndefined(other);
         return new Stream(
-            () => zipperMerge(this.getSource(), Stream.getSource(other)),
+            () => looseZipperMerge(this.getSource(), Stream.getSource(other)),
             {
                 immutable:
                     other instanceof Stream &&
@@ -998,13 +1117,9 @@ export default class Stream<T> implements Iterable<T> {
     }
 
     // TODO docs
-    public equalLengthZipperMerge<O>(other: Iterable<O>): Stream<T | O> {
+    public zipperMerge<O>(other: Iterable<O>): Stream<T | O> {
         return new Stream(
-            () =>
-                equalLengthZipperMerge(
-                    this.getSource(),
-                    Stream.getSource(other)
-                ),
+            () => zipperMerge(this.getSource(), Stream.getSource(other)),
             {
                 immutable:
                     other instanceof Stream &&
@@ -1064,8 +1179,9 @@ export default class Stream<T> implements Iterable<T> {
      */
     public partition<S extends number | bigint>(
         size: S
-    ): Stream<S extends number ? TupleOfLength<S, T> : T[]> {
+    ): Stream<TupleOfLength<S, T>> {
         requirePositive(requireInteger(size));
+
         if (size <= 0 || size <= 0n)
             throw new Error("size must be greater than 0");
 
@@ -1484,15 +1600,18 @@ export default class Stream<T> implements Iterable<T> {
         }
     }
 
-    /** Returns a Stream with sub-Iterable elements concatenated into it. */
-    public flat(): Stream<T extends Iterable<infer SubT> ? SubT : T> {
-        const self = this;
-        return Stream.iter(function* () {
-            for (const value of self) {
-                if (isIterable(value)) yield* value;
-                else yield value;
-            }
-        }) as any;
+    /**
+     *  Returns a Stream with sub-Iterable elements (to the given depth) concatenated into it.
+     */
+    public flat<D extends number>(depth: D): Stream<ValueOf<Flat<this, D>>>;
+    /**
+     * Returns a Stream with sub-Iterable elements concatenated into it.
+     */
+    public flat(): Stream<ValueOf<Flat<this, 1>>>;
+    public flat(depth: number = 1): Stream<any> {
+        return new Stream<any>(() => flat(this.getSource(), depth), {
+            immutable: this.sourceProperties.immutable,
+        });
     }
 
     /**
@@ -1817,8 +1936,7 @@ export default class Stream<T> implements Iterable<T> {
 
     // TODO docs
     public toString() {
-        // TODO maybe limit this so it doesn't softlock on infinite streams.
-        return this.mkString(",");
+        return this.mkString();
     }
 
     // TODO docs

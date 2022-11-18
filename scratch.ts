@@ -5,6 +5,7 @@ import {
     average,
     DeLiteral,
     distinct,
+    flat,
     isArray,
     lazy,
     random,
@@ -206,5 +207,33 @@ async function main() {
         .partition(2)
         .toObject();
     console.log(afdadf);
+
+    const fsadf = `fdadsfasd${Stream.from("12.43.21.20").without(".")}`;
+    console.log(fsadf);
+    ``;
+
+    console.log(
+        Stream.fromObject({
+            foo: "bar",
+            1: "one",
+            2: "two",
+            3: "three",
+            4: "four",
+        }).toMap()
+    );
+
+    const sdfasfdas = Stream.from("0123456789").partition(2n);
+
+    console.log([
+        ...flat(
+            Stream.of(
+                [[[1]]],
+                [
+                    [[1, 2]],
+                    [[3, 4]],
+                ]
+            )
+        , 2),
+    ]);
 }
 main().catch(e => console.error(e));

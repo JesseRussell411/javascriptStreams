@@ -6,20 +6,47 @@ import { isNumberObject } from "util/types";
 import { groupCollapsed } from "console";
 import { AsyncResource } from "async_hooks";
 
-type a = `${number}` extends "number" ? true : false;
-// TODO DOCS
-export function deepCopy<T>(object: T): T {
-    if (typeof object === "object" && object !== null) {
-        const copy: any = Array.isArray(object) ? [] : {};
-
-        for (const field in object) {
-            copy[field] = deepCopy(object[field]);
-        }
-
-        return copy;
-    } else {
-        return object;
+//TODO DOCS
+export function deepCopy<T>(structure: T): T {
+    if (structure === null) return structure;
+    if (typeof structure !== "function" && typeof structure !== "object") {
+        return structure;
     }
+
+    let copy: any;
+    if (structure instanceof Set) {
+        copy = new Set();
+        for (const value of structure) {
+            copy.add(deepCopy(value));
+        }
+    } else if (structure instanceof Map) {
+        copy = new Map();
+        for (const [key, value] of structure) {
+            copy.set(key, deepCopy(value));
+        }
+    } else if (structure instanceof Function) {
+        copy = (...args: any) => structure(...args);
+    } else if (structure instanceof Boolean) {
+        copy = new Boolean(structure.valueOf());
+    } else if (structure instanceof Number) {
+        copy = new Number(structure.valueOf());
+    } else if (structure instanceof String) {
+        copy = new String(structure.valueOf);
+    } else if (Array.isArray(structure)) {
+        copy = [];
+    } else {
+        copy = Object.create(Object.getPrototypeOf(structure));
+    }
+
+    for (const key of Object.getOwnPropertyNames(structure)) {
+        copy[key] = deepCopy((structure as any)[key]);
+    }
+
+    for (const key of Object.getOwnPropertySymbols(structure)) {
+        copy[key] = deepCopy((structure as any)[key]);
+    }
+
+    return copy;
 }
 
 //TODO DOCS
@@ -50,6 +77,7 @@ export function deepEquals(a: any, b: any) {
         for (const field in b) {
             if (!(field in a)) return false;
         }
+
         return true;
     }
 }
@@ -532,83 +560,6 @@ export function count<T>(
     }
 }
 
-// ------------------------------------------
-// utility types
-// -----------------------------------
-
-export type Difference<T, Exclude> = T extends Exclude ? never : T;
-export type Intersection<A, B> = A extends B ? A : never;
-
-export type ValueOf<T> = T extends (infer V)[]
-    ? V
-    : T extends Record<keyof any, infer V>
-    ? V
-    : T[keyof T];
-
-export type DigitCharacter =
-    | "0"
-    | "1"
-    | "2"
-    | "3"
-    | "4"
-    | "5"
-    | "6"
-    | "7"
-    | "8"
-    | "9";
-export type IntCharacter = DigitCharacter | "-";
-export type NumberCharacter = IntCharacter | ".";
-
-export type WhitespaceCharacter = " " | "\n" | "\t" | "\r" | "\v" | "\f";
-
-export type IsWhitespaceOnly<T> = T extends WhitespaceCharacter
-    ? true
-    : T extends `${WhitespaceCharacter}${infer Rest}`
-    ? IsWhitespaceOnly<Rest>
-    : false;
-
-export type IsNegative<N extends number | bigint> = `${N}` extends `-${infer _}`
-    ? true
-    : false;
-
-export type Includes<
-    Haystack extends string,
-    Needle extends string | number | bigint | boolean | null | undefined
-> = Haystack extends `${string}${Needle}${string}` ? true : false;
-
-export type IsStringLiteral<T> = T extends `${infer _}` ? true : false;
-export type IsNumberLiteral<T> = T extends number
-    ? `${T}` extends `${NumberCharacter}${infer _}`
-        ? true
-        : false
-    : false;
-
-export type IsBigIntLiteral<T> = T extends bigint
-    ? `${T}` extends `${IntCharacter}${infer _}`
-        ? true
-        : false
-    : false;
-
-export type IsLiteral<T> = IsStringLiteral<T> extends true
-    ? true
-    : IsNumberLiteral<T> extends true
-    ? true
-    : IsBigIntLiteral<T> extends true
-    ? true
-    : false;
-
-export type TupleOfLength<
-    Length extends number,
-    T = unknown,
-    Accumulator extends T[] = []
-> = IsNumberLiteral<Length> extends false
-    ? T[]
-    : IsNegative<Length> extends true
-    ? unknown
-    : Accumulator["length"] extends Length
-    ? Accumulator
-    : TupleOfLength<Length, T, [...Accumulator, T]>;
-
 export function asNumber(
     value: boolean | number | bigint | null | undefined
 ): number {
@@ -757,17 +708,47 @@ export function multiCompare<T>(a: T, b: T, orders: Iterable<Order<T>>) {
     return 0;
 }
 
-export function flat<SubT>(
-    collection: Iterable<Iterable<SubT>>
-): Iterable<SubT> {
+export type Flat<
+    I extends Iterable<any>,
+    Depth extends number = 1
+> = IsLiteral<Depth> extends false
+    ? Iterable<unknown>
+    : IsNegative<Depth> extends true
+    ? never
+    : Depth extends 0
+    ? I
+    : I extends Iterable<infer SubI>
+    ? Depth extends 1
+        ? SubI
+        : SubI extends Iterable<any>
+        ? Flat<SubI, UC<Subtract<Depth, 1>, 0>>
+        : never
+    : never;
+
+export function flat<I extends Iterable<any>>(collection: I): Flat<I, 1>;
+
+export function flat<I extends Iterable<any>, D extends number>(
+    collection: I,
+    depth: D
+): Flat<I, D>;
+
+export function flat(
+    collection: Iterable<any>,
+    depth: number = 1
+): Iterable<any> {
     return iter(function* () {
         for (const value of collection) {
-            yield* value;
+            if (depth > 1) {
+                yield* flat(value, depth - 1);
+            } else {
+                yield* value;
+            }
         }
-    });
+    }) as any;
 }
+
 //TODO DOCS
-export function zipperMerge<A, B>(
+export function looseZipperMerge<A, B>(
     a: Iterable<A>,
     b: Iterable<B>
 ): Iterable<A | B> {
@@ -796,7 +777,7 @@ export function zipperMerge<A, B>(
     });
 }
 
-export function equalLengthZipperMerge<A, B>(
+export function zipperMerge<A, B>(
     a: Iterable<A>,
     b: Iterable<B>
 ): Iterable<A | B> {
@@ -1234,32 +1215,62 @@ export function indexBy<T, K>(
     return index;
 }
 
-export function groupBy<T, K, V>(
+// TODO docs
+export function groupBy<K, T>(
+    collection: Iterable<T>,
+    keySelector: (value: T, index: number) => K
+): Map<K, T[]>;
+
+// TODO DOCS
+export function groupBy<K, T, V>(
     collection: Iterable<T>,
     keySelector: (value: T, index: number) => K,
     valueSelector: (value: T, index: number) => V
 ): Map<K, V[]>;
 
-export function groupBy<T, K>(
+// TODO DOCS
+export function groupBy<K, T, V, G>(
     collection: Iterable<T>,
-    keySelector: (value: T, index: number) => K
-): Map<K, T[]>;
+    keySelector: (value: T, index: number) => K,
+    valueSelector: (value: T, index: number) => V,
+    groupSelector: (group: V[], key: K) => G
+): Map<K, G>;
+
+// TODO DOCS
+export function groupBy<K, T, G>(
+    collection: Iterable<T>,
+    keySelector: (value: T, index: number) => K,
+    valueSelector: undefined,
+    groupSelector: (group: T[], key: K) => G
+): Map<K, G>;
 
 export function groupBy<T, K>(
     collection: Iterable<T>,
     keySelector: (value: T, index: number) => K,
-    valueSelector: (value: T, index: number) => any = value => value
-): Map<K, any[]> {
-    const groups = new Map<K, any[]>();
+    valueSelector: (value: T, index: number) => any = v => v,
+    groupSelector?: (group: any[], key: K, index: number) => any
+): Map<K, any> {
+    const groups = new Map<K, any>();
 
-    let index = 0;
+    let i = 0;
     for (const value of collection) {
-        const key = keySelector(value, index);
+        const key = keySelector(value, i);
 
-        const group = groups.get(key) ?? setAndGet(groups, key, []);
+        const group = groups.get(key);
+        if (group === undefined) {
+            groups.set(key, [valueSelector(value, i)]);
+        } else {
+            group.push(valueSelector(value, i));
+        }
 
-        group.push(valueSelector(value, index));
-        index++;
+        i++;
+    }
+
+    i = 0;
+    if (groupSelector !== undefined) {
+        for (const entry of groups) {
+            groups.set(entry[0], groupSelector(entry[1], entry[0], i++));
+        }
     }
 
     return groups;
@@ -1999,3 +2010,198 @@ export function withIndex<T>(iterable: Iterable<T>): Iterable<[number, T]> {
         }
     });
 }
+
+// ------------------------------------------
+// utility types
+// -----------------------------------
+export type Replace<T, A, B> = T extends A ? B : T;
+
+export type ValueOf<T> = T extends (infer V)[]
+    ? V
+    : T extends Iterable<infer V>
+    ? V
+    : T extends Record<keyof any, infer V>
+    ? V
+    : T[keyof T];
+
+export type DigitCharacter =
+    | "0"
+    | "1"
+    | "2"
+    | "3"
+    | "4"
+    | "5"
+    | "6"
+    | "7"
+    | "8"
+    | "9";
+export type IntCharacter = DigitCharacter | "-";
+export type NumberCharacter = IntCharacter | ".";
+
+export type WhitespaceCharacter = " " | "\n" | "\t" | "\r" | "\v" | "\f";
+
+export type IsWhitespaceOnly<T> = T extends WhitespaceCharacter
+    ? true
+    : T extends `${WhitespaceCharacter}${infer Rest}`
+    ? IsWhitespaceOnly<Rest>
+    : false;
+
+export type IsNegative<N extends number | bigint> = `${N}` extends `-${infer _}`
+    ? true
+    : false;
+
+export type IsInt<N extends number | bigint> = N extends bigint
+    ? true
+    : `${N}` extends `${infer _}.${infer _0}`
+    ? false
+    : true;
+
+export type Includes<
+    Haystack extends string,
+    Needle extends string | number | bigint | boolean | null | undefined
+> = Haystack extends `${string}${Needle}${string}` ? true : false;
+
+export type IsStringLiteral<T> = T extends `${infer _}` ? true : false;
+export type IsNumberLiteral<T> = T extends number
+    ? `${T}` extends `${NumberCharacter}${infer _}`
+        ? true
+        : false
+    : false;
+
+export type IsBigIntLiteral<T> = T extends bigint
+    ? `${T}` extends `${IntCharacter}${infer _}`
+        ? true
+        : false
+    : false;
+
+export type IsLiteral<T> = IsStringLiteral<T> extends true
+    ? true
+    : IsNumberLiteral<T> extends true
+    ? true
+    : IsBigIntLiteral<T> extends true
+    ? true
+    : false;
+
+export type GenericNumberString<N extends number | bigint> =
+    `${N}` extends `${infer S}n` ? S : `${N}`;
+
+export type Not<B extends boolean | undefined> = B extends true
+    ? false
+    : B extends false
+    ? true
+    : undefined;
+
+export type Or<
+    A extends boolean | undefined,
+    B extends boolean | undefined
+> = A extends true
+    ? B extends true
+        ? true
+        : B extends false
+        ? true
+        : undefined
+    : A extends false
+    ? B extends true
+        ? true
+        : B extends false
+        ? false
+        : undefined
+    : undefined;
+
+export type And<
+    A extends boolean | undefined,
+    B extends boolean | undefined
+> = A extends true
+    ? B extends true
+        ? true
+        : B extends false
+        ? false
+        : undefined
+    : A extends false
+    ? B extends true
+        ? false
+        : B extends false
+        ? false
+        : undefined
+    : undefined;
+
+export type Xor<
+    A extends boolean | undefined,
+    B extends boolean | undefined
+> = Or<And<Not<A>, B>, And<A, Not<B>>>;
+
+type TupleOfLength_definition<
+    Length extends number | bigint,
+    T,
+    Accumulator extends T[] = []
+> = IsLiteral<Length> extends false
+    ? T[]
+    : IsNegative<Length> extends true
+    ? never
+    : `${Accumulator["length"]}` extends GenericNumberString<Length>
+    ? Accumulator
+    : TupleOfLength_definition<Length, T, [...Accumulator, T]>;
+
+export type TupleOfLength<
+    Length extends number | bigint,
+    T = undefined
+> = TupleOfLength_definition<Length, T>;
+
+export type Add<A extends number | bigint, B extends number | bigint> = Or<
+    IsNegative<A>,
+    IsNegative<B>
+> extends true
+    ? undefined
+    : [...TupleOfLength<A>, ...TupleOfLength<B>]["length"];
+
+type Subtract_definition<
+    A extends number,
+    B extends number,
+    Gap extends undefined[] = []
+> = Or<Or<IsNegative<A>, IsNegative<B>>, Lt<A, B>> extends true
+    ? undefined
+    : [...TupleOfLength<B>, ...Gap]["length"] extends A
+    ? Gap["length"]
+    : Subtract_definition<A, B, [...Gap, undefined]>;
+
+export type Subtract<A extends number, B extends number> = Subtract_definition<
+    A,
+    B
+>;
+
+export type Eq<A extends number, B extends number> = A extends B ? true : false;
+
+type Lt_definition<
+    A extends number,
+    B extends number,
+    Gap extends undefined[] = [undefined]
+> = Or<
+    Or<IsNegative<A>, IsNegative<B>>,
+    Not<And<IsInt<A>, IsInt<B>>>
+> extends true
+    ? undefined
+    : A extends B
+    ? false
+    : [...TupleOfLength<A>, ...Gap]["length"] extends B
+    ? true
+    : [...TupleOfLength<B>, ...Gap]["length"] extends A
+    ? false
+    : Lt_definition<A, B, [...Gap, undefined]>;
+
+export type Lt<A extends number, B extends number> = Lt_definition<
+    A,
+    B,
+    [undefined]
+>;
+
+export type Gt<A extends number, B extends number> = Or<
+    IsNegative<A>,
+    IsNegative<B>
+> extends true
+    ? undefined
+    : Not<Or<Lt<A, B>, Eq<A, B>>>;
+
+export type Lte<A extends number, B extends number> = Or<Lt<A, B>, Eq<A, B>>;
+export type Gte<A extends number, B extends number> = Or<Gt<A, B>, Eq<A, B>>;
+
+export type UC<T, Or> = T extends undefined ? Or : T;
