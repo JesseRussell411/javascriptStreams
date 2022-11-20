@@ -6,6 +6,9 @@ import {
     DeLiteral,
     distinct,
     flat,
+    getAllPropertyDescriptors,
+    getAllPropertyEntries,
+    getHierarchyOf,
     isArray,
     lazy,
     random,
@@ -224,16 +227,26 @@ async function main() {
 
     const sdfasfdas = Stream.from("0123456789").partition(2n);
 
-    console.log([
-        ...flat(
-            Stream.of(
-                [[[1]]],
-                [
-                    [[1, 2]],
-                    [[3, 4]],
-                ]
-            )
-        , 2),
-    ]);
+    console.log([...flat(Stream.of([[[1]]], [[[1, 2]], [[3, 4]]]), 2)]);
+    let a = { aa: 1, u: 1 };
+    let b = Object.assign(Object.create(a), { bb: 2, u: 2 });
+    let c = Object.assign(Object.create(b), { cc: 3, u: 3 });
+    console.log(c.bb);
+    // Object.setPrototypeOf(a, new Date())
+    let h = getHierarchyOf(c);
+
+    console.log(h);
+    console.log(h[0] === c);
+    console.log(h[1] === b);
+    console.log(h[2] === a);
+
+    console.log(Object.getPrototypeOf(Object.getPrototypeOf(a)));
+
+    console.log([...getAllPropertyEntries(c)]);
+    console.log(getAllPropertyDescriptors(c));
+    console.log(c.u)
+    console.log()
+
+    console.log(Stream.fromObjectHierarchy(c).asMap())
 }
 main().catch(e => console.error(e));

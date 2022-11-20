@@ -2,9 +2,104 @@ import Stream, { isStream } from "./Stream";
 import { and, or } from "./logic";
 import { StreamableArray } from "./Streamable";
 import { toASCII } from "punycode";
-import { isNumberObject } from "util/types";
+import { isBooleanObject, isNumberObject } from "util/types";
 import { groupCollapsed } from "console";
 import { AsyncResource } from "async_hooks";
+
+export function getOwnPropertyKeys<K extends keyof any, V>(
+    object: Record<K, V>
+): (string | symbol)[] {
+    return [
+        ...Object.getOwnPropertyNames(object),
+        ...Object.getOwnPropertySymbols(object),
+    ];
+}
+
+export function getOwnPropertyEntries<K extends keyof any, V>(
+    object: Record<K, V>
+): [RealKey<K>, V][] {
+    const entries = [] as [RealKey<K>, V][];
+
+    for (const name of Object.getOwnPropertyNames(object)) {
+        entries.push([name as any, (object as any)[name]]);
+    }
+
+    for (const symbol of Object.getOwnPropertySymbols(object)) {
+        entries.push([symbol as any, (object as any)[symbol]]);
+    }
+
+    return entries;
+}
+
+const nullPrototype = Object.getPrototypeOf({});
+export function getHierarchyOf(object: any & {}): (any & {})[] {
+    const hierarchy = [];
+    let current = object;
+    while (current !== nullPrototype && current != null) {
+        hierarchy.push(current);
+        current = Object.getPrototypeOf(current);
+    }
+
+    return hierarchy;
+}
+
+export function getAllPropertyNames(object: any & {}): string[] {
+    const names = new Set<string>();
+    for (const current of getHierarchyOf(object)) {
+        for (const name of Object.getOwnPropertyNames(current)) {
+            names.add(name);
+        }
+    }
+    return [...names];
+}
+
+export function getAllPropertySymbols(object: any & {}): symbol[] {
+    const symbols = new Set<symbol>();
+    for (const current of getHierarchyOf(object)) {
+        for (const symbol of Object.getOwnPropertySymbols(current)) {
+            symbols.add(symbol);
+        }
+    }
+    return [...symbols];
+}
+
+export function getAllPropertyKeys(object: any & {}): (string | symbol)[] {
+    const keys = new Set<string | symbol>();
+    for (const current of getHierarchyOf(object)) {
+        for (const name of Object.getOwnPropertyNames(current)) {
+            keys.add(name);
+        }
+        for (const symbol of Object.getOwnPropertySymbols(current)) {
+            keys.add(symbol);
+        }
+    }
+    return [...keys];
+}
+
+export function getAllPropertyDescriptors(
+    object: any & {}
+): {} & Record<string | symbol, PropertyDescriptor> {
+    const descriptors = {} as {} & Record<string | symbol, PropertyDescriptor>;
+    const hierarchy = getHierarchyOf(object);
+    for (let i = hierarchy.length - 1; i >= 0; i--) {
+        const current = hierarchy[i];
+        for (const key of getOwnPropertyKeys(current)) {
+            descriptors[key] = Object.getOwnPropertyDescriptor(current, key)!;
+        }
+    }
+
+    return descriptors;
+}
+
+export function getAllPropertyEntries(
+    object: any & {}
+): [string | symbol, any][] {
+    const entries = [] as [string | symbol, any][];
+    for (const key of getAllPropertyKeys(object)) {
+        entries.push([key, object[key]]);
+    }
+    return entries;
+}
 
 //TODO DOCS
 export function deepCopy<T>(structure: T): T {
@@ -310,8 +405,10 @@ export function includes<T>(
     value: T,
     fromIndex?: number | bigint
 ) {
-    if (fromIndex !== undefined) {
-        requireInteger(requirePositive(fromIndex));
+    if (collection instanceof Stream) {
+        return collection.includes(value, fromIndex);
+    } else if (fromIndex !== undefined) {
+        requireInteger(require0OrGreater(fromIndex));
         if (isArray(collection)) {
             return collection.includes(value, Number(fromIndex));
         } else {
@@ -544,19 +641,19 @@ export function count<T>(
             return size;
         }
     } else {
-        let count = 0;
+        let size = 0;
 
         if (isArray(collection)) {
             for (let i = 0; i < collection.length; i++) {
-                if (test(collection[i]!, i)) count++;
+                if (test(collection[i]!, i)) size++;
             }
         } else {
             let i = 0;
             for (const value of collection) {
-                if (test(value, i++)) count++;
+                if (test(value, i++)) size++;
             }
         }
-        return count;
+        return size;
     }
 }
 
@@ -708,6 +805,25 @@ export function multiCompare<T>(a: T, b: T, orders: Iterable<Order<T>>) {
     return 0;
 }
 
+type ShallowFlatArray<I extends readonly any[][]> = I extends readonly [
+    infer Head,
+    ...infer Tail
+]
+    ? Head extends readonly [...infer SubHead]
+        ? Tail extends readonly []
+            ? SubHead
+            : Tail extends readonly any[][]
+            ? [...SubHead, ...ShallowFlatArray<Tail>]
+            : never
+        : Tail extends (infer SubTail)[]
+        ? (Head | SubTail)[]
+        : never
+    : I extends readonly (infer SubI)[]
+    ? SubI extends readonly (infer SubSubI)[]
+        ? SubSubI[]
+        : never
+    : never;
+
 export type Flat<
     I extends Iterable<any>,
     Depth extends number = 1
@@ -715,27 +831,26 @@ export type Flat<
     ? Iterable<unknown>
     : IsNegative<Depth> extends true
     ? never
+    : IsInt<Depth> extends false
+    ? never
     : Depth extends 0
     ? I
     : I extends Iterable<infer SubI>
     ? Depth extends 1
-        ? SubI
+        ? SubI extends readonly (infer SubSubI)[]
+            ? SubSubI[]
+            : SubI
         : SubI extends Iterable<any>
-        ? Flat<SubI, UC<Subtract<Depth, 1>, 0>>
+        ? Flat<SubI, Subtract<Depth, 1>>
         : never
     : never;
 
-export function flat<I extends Iterable<any>>(collection: I): Flat<I, 1>;
-
 export function flat<I extends Iterable<any>, D extends number>(
     collection: I,
-    depth: D
-): Flat<I, D>;
-
-export function flat(
-    collection: Iterable<any>,
     depth: number = 1
-): Iterable<any> {
+): Flat<I, D> {
+    require0OrGreater(requireInteger(depth));
+
     return iter(function* () {
         for (const value of collection) {
             if (depth > 1) {
@@ -1561,7 +1676,7 @@ export class Random {
         count?: number | bigint
     ): Iterable<T> | T => {
         if (count === undefined) return random.choice(asSolid(collection));
-        requireInteger(requirePositive(count));
+        requireInteger(require0OrGreater(count));
 
         const usableCount = BigInt(count);
 
@@ -1591,7 +1706,7 @@ export function takeAlternating<T>(
     collection: Iterable<T>,
     interval: number | bigint = 2n
 ): Iterable<T> {
-    requireInteger(requirePositive(interval));
+    requireInteger(require0OrGreater(interval));
     const usableInterval = BigInt(interval);
 
     if (usableInterval === 0n) return empty<T>();
@@ -1618,7 +1733,7 @@ export function skipAlternating<T>(
     collection: Iterable<T>,
     interval: number | bigint = 2n
 ): Iterable<T> {
-    requireInteger(requirePositive(interval));
+    requireInteger(require0OrGreater(interval));
     const usableInterval = BigInt(interval);
 
     if (usableInterval === 0n) return collection;
@@ -1632,7 +1747,7 @@ export function skipAlternating<T>(
 }
 
 export function skipSparse<T>(collection: Iterable<T>, count: number | bigint) {
-    requireInteger(requirePositive(count));
+    requireInteger(require0OrGreater(count));
     const usableCount = BigInt(count);
     if (count === 0) return collection;
 
@@ -1651,7 +1766,7 @@ export function takeSparse<T>(
     collection: Iterable<T>,
     count: number | bigint
 ): Iterable<T> {
-    requireInteger(requirePositive(count));
+    requireInteger(require0OrGreater(count));
     const usableCount = BigInt(count);
 
     if (count === 0) return empty<T>();
@@ -1665,7 +1780,7 @@ export function takeSparse<T>(
 }
 
 export function skip<T>(collection: Iterable<T>, count: number | bigint) {
-    requireInteger(requirePositive(count));
+    requireInteger(require0OrGreater(count));
     const usableCount = BigInt(count);
     if (usableCount <= 0n) return collection;
 
@@ -1883,7 +1998,7 @@ export function skipRandomToArray<T>(
     collection: Iterable<T>,
     count: number | bigint
 ): T[] {
-    requireInteger(requirePositive(count));
+    requireInteger(require0OrGreater(count));
     const usableCount = BigInt(count);
 
     // TODO find a better way of doing this, there has to be a better way
@@ -1941,8 +2056,14 @@ export function takeWhile<T>(
     });
 }
 
-export function requirePositive(num: number | bigint) {
-    if (num < 0) throw new Error(`expected positive number but got ${num}`);
+export function require0OrGreater(num: number | bigint) {
+    if (num < 0) throw new Error(`expected 0 or greater but got ${num}`);
+    else return num;
+}
+
+export function requireGreaterThan0(num: number | bigint) {
+    if (!(num > 0))
+        throw new Error(`expected number greater than 0 but got ${num}`);
     else return num;
 }
 
@@ -1952,8 +2073,8 @@ export function requireNegative(num: number | bigint) {
 }
 
 export function requireInteger(num: number | bigint) {
-    if (typeof num === "bigint") return num;
-    if (num % 1 === 0) return num;
+    if (typeof num === "bigint") return num as any;
+    if (num % 1 === 0) return num as any;
     throw new Error(`expected integer but got ${num}`);
 }
 
@@ -2014,6 +2135,7 @@ export function withIndex<T>(iterable: Iterable<T>): Iterable<[number, T]> {
 // ------------------------------------------
 // utility types
 // -----------------------------------
+
 export type Replace<T, A, B> = T extends A ? B : T;
 
 export type ValueOf<T> = T extends (infer V)[]
@@ -2023,6 +2145,9 @@ export type ValueOf<T> = T extends (infer V)[]
     : T extends Record<keyof any, infer V>
     ? V
     : T[keyof T];
+
+export type RealKey<K> = Replace<K, number, string>;
+export type RealKeyOf<T> = RealKey<keyof T>;
 
 export type DigitCharacter =
     | "0"
@@ -2046,12 +2171,16 @@ export type IsWhitespaceOnly<T> = T extends WhitespaceCharacter
     ? IsWhitespaceOnly<Rest>
     : false;
 
-export type IsNegative<N extends number | bigint> = `${N}` extends `-${infer _}`
+export type IsNegative<N extends number | bigint> = IsLiteral<N> extends false
+    ? boolean
+    : `${N}` extends `-${infer _}`
     ? true
     : false;
 
 export type IsInt<N extends number | bigint> = N extends bigint
     ? true
+    : IsNumberLiteral<N> extends false
+    ? boolean
     : `${N}` extends `${infer _}.${infer _0}`
     ? false
     : true;
@@ -2062,6 +2191,7 @@ export type Includes<
 > = Haystack extends `${string}${Needle}${string}` ? true : false;
 
 export type IsStringLiteral<T> = T extends `${infer _}` ? true : false;
+
 export type IsNumberLiteral<T> = T extends number
     ? `${T}` extends `${NumberCharacter}${infer _}`
         ? true
@@ -2085,50 +2215,31 @@ export type IsLiteral<T> = IsStringLiteral<T> extends true
 export type GenericNumberString<N extends number | bigint> =
     `${N}` extends `${infer S}n` ? S : `${N}`;
 
+export type And<A extends boolean, B extends boolean> = A extends true
+    ? B extends true
+        ? true
+        : false
+    : false;
+
+export type Or<A extends boolean, B extends boolean> = A extends true
+    ? true
+    : B extends true
+    ? true
+    : false;
+
+export type Xor<A extends boolean, B extends boolean> = A extends true
+    ? B extends true
+        ? false
+        : true
+    : B extends true
+    ? true
+    : false;
+
 export type Not<B extends boolean | undefined> = B extends true
     ? false
     : B extends false
     ? true
     : undefined;
-
-export type Or<
-    A extends boolean | undefined,
-    B extends boolean | undefined
-> = A extends true
-    ? B extends true
-        ? true
-        : B extends false
-        ? true
-        : undefined
-    : A extends false
-    ? B extends true
-        ? true
-        : B extends false
-        ? false
-        : undefined
-    : undefined;
-
-export type And<
-    A extends boolean | undefined,
-    B extends boolean | undefined
-> = A extends true
-    ? B extends true
-        ? true
-        : B extends false
-        ? false
-        : undefined
-    : A extends false
-    ? B extends true
-        ? false
-        : B extends false
-        ? false
-        : undefined
-    : undefined;
-
-export type Xor<
-    A extends boolean | undefined,
-    B extends boolean | undefined
-> = Or<And<Not<A>, B>, And<A, Not<B>>>;
 
 type TupleOfLength_definition<
     Length extends number | bigint,
@@ -2137,6 +2248,8 @@ type TupleOfLength_definition<
 > = IsLiteral<Length> extends false
     ? T[]
     : IsNegative<Length> extends true
+    ? never
+    : IsInt<Length> extends false
     ? never
     : `${Accumulator["length"]}` extends GenericNumberString<Length>
     ? Accumulator
@@ -2147,59 +2260,73 @@ export type TupleOfLength<
     T = undefined
 > = TupleOfLength_definition<Length, T>;
 
-export type Add<A extends number | bigint, B extends number | bigint> = Or<
-    IsNegative<A>,
-    IsNegative<B>
-> extends true
-    ? undefined
+type ArrayMathHack_IsInputSanitary<
+    A extends number | bigint,
+    B extends number | bigint
+> = IsLiteral<A> extends false
+    ? false
+    : IsInt<A> extends false
+    ? false
+    : IsNegative<A> extends true
+    ? false
+    : IsLiteral<B> extends false
+    ? false
+    : IsInt<B> extends false
+    ? false
+    : IsNegative<B> extends true
+    ? false
+    : true;
+
+export type Add<
+    A extends number | bigint,
+    B extends number | bigint
+> = ArrayMathHack_IsInputSanitary<A, B> extends false
+    ? number
     : [...TupleOfLength<A>, ...TupleOfLength<B>]["length"];
 
 type Subtract_definition<
     A extends number,
     B extends number,
-    Gap extends undefined[] = []
-> = Or<Or<IsNegative<A>, IsNegative<B>>, Lt<A, B>> extends true
-    ? undefined
+    Gap extends any[] = []
+> = ArrayMathHack_IsInputSanitary<A, B> extends false
+    ? number
     : [...TupleOfLength<B>, ...Gap]["length"] extends A
     ? Gap["length"]
-    : Subtract_definition<A, B, [...Gap, undefined]>;
+    : Subtract_definition<A, B, [...Gap, any]>;
 
 export type Subtract<A extends number, B extends number> = Subtract_definition<
     A,
     B
 >;
 
-export type Eq<A extends number, B extends number> = A extends B ? true : false;
+export type Eq<A extends number | bigint, B extends number | bigint> = And<
+    IsLiteral<A>,
+    IsLiteral<B>
+> extends false
+    ? boolean
+    : GenericNumberString<A> extends GenericNumberString<B>
+    ? true
+    : false;
 
 type Lt_definition<
     A extends number,
     B extends number,
-    Gap extends undefined[] = [undefined]
-> = Or<
-    Or<IsNegative<A>, IsNegative<B>>,
-    Not<And<IsInt<A>, IsInt<B>>>
-> extends true
-    ? undefined
+    Gap extends any[] = [any]
+> = ArrayMathHack_IsInputSanitary<A, B> extends false
+    ? boolean
     : A extends B
     ? false
     : [...TupleOfLength<A>, ...Gap]["length"] extends B
     ? true
     : [...TupleOfLength<B>, ...Gap]["length"] extends A
     ? false
-    : Lt_definition<A, B, [...Gap, undefined]>;
+    : Lt_definition<A, B, [...Gap, any]>;
 
-export type Lt<A extends number, B extends number> = Lt_definition<
-    A,
-    B,
-    [undefined]
+export type Lt<A extends number, B extends number> = Lt_definition<A, B, [any]>;
+
+export type Gt<A extends number, B extends number> = Not<
+    Or<Lt<A, B>, Eq<A, B>>
 >;
-
-export type Gt<A extends number, B extends number> = Or<
-    IsNegative<A>,
-    IsNegative<B>
-> extends true
-    ? undefined
-    : Not<Or<Lt<A, B>, Eq<A, B>>>;
 
 export type Lte<A extends number, B extends number> = Or<Lt<A, B>, Eq<A, B>>;
 export type Gte<A extends number, B extends number> = Or<Gt<A, B>, Eq<A, B>>;
