@@ -737,16 +737,6 @@ export function smartCompare(a: any, b: any): number {
         return a.length - b.length;
     }
 
-    // objects
-    if (
-        typeof a === "object" &&
-        a !== null &&
-        typeof b === "object" &&
-        b !== null
-    ) {
-        return Object.values(a).length - Object.values(b).length;
-    }
-
     // if nothing else fits, then compare by string values.
     return `${a}`.localeCompare(`${b}`);
 }
@@ -853,10 +843,10 @@ export function flat<I extends Iterable<any>, D extends number>(
 
     return iter(function* () {
         for (const value of collection) {
-            if (depth > 1) {
-                yield* flat(value, depth - 1);
-            } else {
+            if (depth === 1) {
                 yield* value;
+            } else {
+                yield* flat(value, depth - 1);
             }
         }
     }) as any;
