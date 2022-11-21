@@ -260,5 +260,8 @@ async function main() {
     let gg =ss.groupBy(e => e[1].length, undefined, g => g.map(e => e[1]))
     let mmmm = gg.toMap();
     console.log(inspect(gg.asArray(), false, null, true));   
+
+    console.log();
+    console.log(Stream.of().min())
 }
 main().catch(e => console.error(e));

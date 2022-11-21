@@ -87,6 +87,9 @@ import {
     lazy,
     getAllPropertyEntries,
     getOwnPropertyEntries,
+    KeySelector,
+    max,
+    min,
 } from "./utils";
 
 // TODO maybe? rename to sequence or pipeline or river or creek or flow or drain or plumbing or stupid or Enumerable or iteration or enumeration or assemblyLine or conveyerBelt or relay or line or construction or structuredIteration or dataModel or flow or dataFlow or Fly or Fling or transformation or translation or shift or alteration or transmute or transition or conversion or morph or tabulation or beam or quiter (query-able iterable)
@@ -1560,6 +1563,28 @@ export default class Stream<T> implements Iterable<T> {
         } else {
             return reduceAndFinalize(this.getSource(), reduction, finalize);
         }
+    }
+
+    // TODO DOCS
+    public max(): T;
+    // TODO DOCS
+    public max(comparator: Comparator<T>): T;
+    // TODO DOCS
+    public max(keySelector: KeySelector<T, any>): T;
+
+    public max(order?: Order<T>){
+        return max(this.getSource(), order);
+    }
+    
+    // TODO DOCS
+    public min(): T;
+    // TODO DOCS
+    public min(comparator: Comparator<T>): T;
+    // TODO DOCS
+    public min(keySelector: KeySelector<T, any>): T;
+    
+    public min(order?: Order<T>){
+        return min(this.getSource(), order);
     }
 
     /**

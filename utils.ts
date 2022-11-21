@@ -772,6 +772,10 @@ export type Comparator<T> = (a: T, b: T) => number;
 export type KeySelector<T, K> = (value: T) => K;
 export type Order<T> = KeySelector<T, any> | Comparator<T>;
 
+export function stringComparator(a: any, b: any){
+    return `${a}`.localeCompare(`${b}`);
+}
+
 export function reverseOrder<T>(order: Order<T>): Comparator<T> {
     const comparator = orderAsComparator(order);
     return (a, b) => comparator(b, a);
@@ -2157,6 +2161,33 @@ export function withIndex<T>(iterable: Iterable<T>): Iterable<[number, T]> {
     });
 }
 
+
+export function max<T>(collection: Iterable<T>, order: Order<T> = smartCompare): T{
+    const comparator = orderAsComparator(order);
+    const iter = collection[Symbol.iterator]();
+    let next = iter.next();
+    
+    if (next.done){
+        throw new Error("cannot get min or max value from empty Iterable");
+    }
+
+    let max = next.value;
+
+    while(!(next = iter.next()).done){
+        const value = next.value;
+        if (comparator(max, value) < 0){
+            max = value;
+        }
+    }
+
+    return max;
+}
+
+export function min<T>(collection: Iterable<T>, order: Order<T> = smartCompare): T{
+    return max(collection, reverseOrder(order));
+}
+
+
 // ------------------------------------------
 // utility types
 // -----------------------------------
@@ -2374,3 +2405,4 @@ export type Gte<A extends number | bigint, B extends number | bigint> = Or<
     Gt<A, B>,
     Eq<A, B>
 >;
+
