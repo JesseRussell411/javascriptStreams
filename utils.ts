@@ -2046,23 +2046,31 @@ export function takeWhile<T>(
     });
 }
 
-export function require0OrGreater(num: number | bigint) {
+export function require0OrGreater<N extends number | bigint>(
+    num: N
+): IsNegative<N> extends false ? N : never {
     if (num < 0) throw new Error(`expected 0 or greater but got ${num}`);
-    else return num;
+    else return num as any;
 }
 
-export function requireGreaterThan0(num: number | bigint) {
+export function requireGreaterThan0<N extends number | bigint>(
+    num: N
+): Or<IsNegative<N>, Eq<N, 0>> extends false ? N : never {
     if (!(num > 0))
         throw new Error(`expected number greater than 0 but got ${num}`);
-    else return num;
+    else return num as any;
 }
 
-export function requireNegative(num: number | bigint) {
+export function requireNegative<N extends number | bigint>(
+    num: N
+): IsNegative<N> extends true ? N : never {
     if (num >= 0) throw new Error(`expected negative number but gor ${num}`);
-    else return num;
+    else return num as any;
 }
 
-export function requireInteger(num: number | bigint) {
+export function requireInteger<N extends number | bigint>(
+    num: N
+): IsInt<N> extends true ? N : never {
     if (typeof num === "bigint") return num as any;
     if (num % 1 === 0) return num as any;
     throw new Error(`expected integer but got ${num}`);
@@ -2205,6 +2213,8 @@ export type IsLiteral<T> = IsStringLiteral<T> extends true
 export type GenericNumberString<N extends number | bigint> =
     `${N}` extends `${infer S}n` ? S : `${N}`;
 
+export type Extends<A, B> = A extends B ? true : false;
+
 export type And<A extends boolean, B extends boolean> = A extends true
     ? B extends true
         ? true
@@ -2275,10 +2285,16 @@ export type Add<
     : [...TupleOfLength<A>, ...TupleOfLength<B>]["length"];
 
 type Subtract_definition<
-    A extends number,
-    B extends number,
+    A extends number | bigint,
+    B extends number | bigint,
     Gap extends any[] = []
-> = ArrayMathHack_IsInputSanitary<A, B> extends false
+> = A extends bigint
+    ? B extends bigint
+        ? bigint
+        : number
+    : B extends bigint
+    ? number
+    : ArrayMathHack_IsInputSanitary<A, B> extends false
     ? number
     : [...TupleOfLength<B>, ...Gap]["length"] extends A
     ? Gap["length"]
@@ -2299,10 +2315,12 @@ export type Eq<A extends number | bigint, B extends number | bigint> = And<
     : false;
 
 type Lt_definition<
-    A extends number,
-    B extends number,
+    A extends number | bigint,
+    B extends number | bigint,
     Gap extends any[] = [any]
-> = ArrayMathHack_IsInputSanitary<A, B> extends false
+> = Or<Extends<A, bigint>, Extends<B, bigint>> extends true
+    ? boolean
+    : ArrayMathHack_IsInputSanitary<A, B> extends false
     ? boolean
     : A extends B
     ? false
@@ -2312,13 +2330,20 @@ type Lt_definition<
     ? false
     : Lt_definition<A, B, [...Gap, any]>;
 
-export type Lt<A extends number, B extends number> = Lt_definition<A, B, [any]>;
+export type Lt<
+    A extends number | bigint,
+    B extends number | bigint
+> = Lt_definition<A, B, [any]>;
 
-export type Gt<A extends number, B extends number> = Not<
+export type Gt<A extends number | bigint, B extends number | bigint> = Not<
     Or<Lt<A, B>, Eq<A, B>>
 >;
 
-export type Lte<A extends number, B extends number> = Or<Lt<A, B>, Eq<A, B>>;
-export type Gte<A extends number, B extends number> = Or<Gt<A, B>, Eq<A, B>>;
-
-export type UC<T, Or> = T extends undefined ? Or : T;
+export type Lte<A extends number | bigint, B extends number | bigint> = Or<
+    Lt<A, B>,
+    Eq<A, B>
+>;
+export type Gte<A extends number | bigint, B extends number | bigint> = Or<
+    Gt<A, B>,
+    Eq<A, B>
+>;
