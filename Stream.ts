@@ -172,7 +172,7 @@ export default class Stream<T> implements Iterable<T> {
     }
 
     /** @returns An empty Stream of the given type. */
-    public static empty<T>(): Stream<T> {
+    public static empty<T = never>(): Stream<T> {
         return new Stream<T>(() => [], {
             fresh: true,
             immutable: true,
@@ -181,7 +181,7 @@ export default class Stream<T> implements Iterable<T> {
     }
 
     /** @return A Stream of the given values. */
-    public static of<T>(...values: T[]) {
+    public static of<T = never>(...values: T[]) {
         return new Stream(() => values, {
             immutable: true,
             count: values.length,
@@ -1582,7 +1582,7 @@ export default class Stream<T> implements Iterable<T> {
     public min(comparator: Comparator<T>): T;
     // TODO DOCS
     public min(keySelector: KeySelector<T, any>): T;
-    
+
     public min(order?: Order<T>){
         return min(this.getSource(), order);
     }
