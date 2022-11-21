@@ -473,7 +473,15 @@ export function mkString(
     arg2: any = "",
     arg3: any = ""
 ): string {
-    if (arguments.length > 2) {
+    if (typeof collection === "string" && arg2 === ""){
+        // this is an optimization that javascript would probably do on its own, but I don't know if it does.
+        if (arg1 === "" && arg3 === ""){
+            return collection;
+        } else {
+            return arg1 + collection + arg2;
+        }
+    }
+    else if (arguments.length > 2) {
         return `${arg1}${mkStringHelper(collection, `${arg2}`)}${arg3}`;
     } else {
         return mkStringHelper(collection, `${arg1}`);
@@ -672,49 +680,53 @@ export interface SmartCompareOptions {
     compareArrays?: (a: readonly any[], b: readonly any[]) => number;
 }
 
+function rateType(value: any) {
+    if (value === null) return 8;
+    if (Array.isArray(value)) return 2;
+
+    switch (typeof value) {
+        case "function":
+            return 1;
+
+        // array -- 2
+
+        case "object":
+            return 3;
+        case "symbol":
+            return 4;
+        case "boolean":
+            return 5;
+
+        case "number":
+            return 6;
+        case "bigint":
+            return 6;
+
+        case "string":
+            return 7;
+
+        // null -- 8
+
+        // Array.sort doesn't actually sort undefined values. It just puts all the undefineds at the end of the array even if the comparator says otherwise.
+        // So I guess I'll just have to agree with Array.sort here
+        case "undefined":
+            return 9;
+    }
+    return -1;
+}
 /** Compares two values in a way that makes more sense than the default of {@link Array.sort}, which just compares by their ascii string values. Unlike {@link Array.sort}'s default comparison, This comparison function compares numbers by returning their difference. */
 export function smartCompare(a: any, b: any): number {
-    function rateType(value: any) {
-        if (value === null) return 8;
-        if (Array.isArray(value)) return 2;
-
-        switch (typeof value) {
-            case "function":
-                return 1;
-
-            // array -- 2
-
-            case "object":
-                return 3;
-            case "symbol":
-                return 4;
-            case "boolean":
-                return 5;
-
-            case "number":
-                return 6;
-            case "bigint":
-                return 6;
-
-            case "string":
-                return 7;
-
-            // null -- 8
-
-            // Array.sort doesn't actually sort undefined values. It just puts all the undefineds at the end of the array even if the comparator says otherwise.
-            // So I guess I'll just have to agree with Array.sort here
-            case "undefined":
-                return 9;
-        }
-        return -1;
-    }
-
     // first sort by type
     const typeRatingA = rateType(a);
     const typeRatingB = rateType(b);
     if (typeRatingA !== typeRatingB) return typeRatingA - typeRatingB;
 
     // then by value
+
+    // string
+    if (typeof a === "string" && typeof b === "string"){
+        return a.localeCompare(b);
+    }
 
     // numeric
     if (typeof a === "number") {
@@ -735,6 +747,21 @@ export function smartCompare(a: any, b: any): number {
     // arrays
     if (Array.isArray(a) && Array.isArray(b)) {
         return a.length - b.length;
+    }
+
+    // symbol
+    if (typeof a === "symbol" && typeof b === "symbol"){
+        if (a.description === undefined){
+            if (b.description === undefined){
+                return 0;
+            } else {
+                return -1;
+            }
+        } else if (b.description === undefined){
+            return 1;
+        } else {
+            return a.description.localeCompare(b.description);
+        }
     }
 
     // if nothing else fits, then compare by string values.
