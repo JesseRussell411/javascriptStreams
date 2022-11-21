@@ -565,13 +565,13 @@ export default class Stream<T> implements Iterable<T> {
     }
 
     /**
-     * Sorts the Stream from least to greatest based on the key from the given key selector function. Comparison is done by {@link smartCompare}.
-     */
-    public orderBy(keySelector: (value: T) => any): OrderedStream<T>;
-    /**
      * Sorts the Stream from least to greatest using the given comparator function.
      */
     public orderBy(comparator: Comparator<T>): OrderedStream<T>;
+    /**
+     * Sorts the Stream from least to greatest based on the key from the given key selector function. Comparison is done by {@link smartCompare}.
+     */
+    public orderBy(keySelector: (value: T) => any): OrderedStream<T>;
 
     public orderBy(order: Order<T>): OrderedStream<T> {
         return new OrderedStream(this.getSource, [order], {
@@ -580,13 +580,13 @@ export default class Stream<T> implements Iterable<T> {
     }
 
     /**
-     * Sorts the Stream from greatest to least based on the key from the given key selector function. Comparison is done by {@link smartCompare}.
-     */
-    public orderByDescending(keySelector: (value: T) => any): OrderedStream<T>;
-    /**
      * Sorts the Stream from greatest to least using the given comparator function.
      */
     public orderByDescending(comparator: Comparator<T>): OrderedStream<T>;
+    /**
+     * Sorts the Stream from greatest to least based on the key from the given key selector function. Comparison is done by {@link smartCompare}.
+     */
+    public orderByDescending(keySelector: (value: T) => any): OrderedStream<T>;
 
     public orderByDescending(order: Order<T>): OrderedStream<T> {
         return this.orderBy(reverseOrder(order));

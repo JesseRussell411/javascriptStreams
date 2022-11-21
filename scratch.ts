@@ -3,6 +3,7 @@ import fs from "fs/promises";
 import { StreamableArray } from "./Streamable";
 import {
     average,
+    Comparator,
     DeLiteral,
     distinct,
     flat,
@@ -248,5 +249,16 @@ async function main() {
     console.log()
 
     console.log(Stream.fromObjectHierarchy(c).asMap())
+
+
+
+    let mm = new Map<number, string>();
+    mm.set(1, "one")
+    mm.set(2, "wto")
+    mm.set(3, "bamama")
+    let ss = Stream.from(mm)
+    let gg =ss.groupBy(e => e[1].length, undefined, g => g.map(e => e[1]))
+    let mmmm = gg.toMap();
+    console.log(inspect(gg.asArray(), false, null, true));   
 }
 main().catch(e => console.error(e));
