@@ -2406,3 +2406,92 @@ export type Gte<A extends number | bigint, B extends number | bigint> = Or<
     Eq<A, B>
 >;
 
+export interface Maybe<T> {
+    readonly value: T | undefined;
+    readonly isDefined: boolean;
+
+    match<R>(ifDefined: (value: T) => R, ifUndefined: () => R): R;
+    match<R>(ifDefined: (value: T) => R, ifUndefined?: () => R): R | undefined;
+
+    or<O>(alternative: O | (() => O)): this | Some<O>;
+}
+
+export interface Some<T> extends Maybe<T> {
+    readonly value: T;
+
+    readonly isDefined: true;
+
+    match<R>(ifDefined: (value: T) => R, ifUndefined?: () => R): R;
+
+    or<O>(_alternative: O | (() => O)): this;
+}
+
+export interface None<T = any> extends Maybe<T> {
+    get value(): undefined;
+
+    get isDefined(): false;
+
+    match<R>(ifDefined: (value: never) => R, ifUndefined: () => R): R;
+    match<R>(ifDefined: (value: never) => R, ifUndefined?: () => R): undefined;
+
+    or<O>(alternative: O | (() => O)): Some<O>;
+}
+
+class SomeInstance<T> implements Some<T> {
+    readonly value: T;
+
+    get isDefined(): true {
+        return true;
+    }
+
+    constructor(value: T) {
+        this.value = value;
+    }
+
+    get match() {
+        const self = this;
+        return (ifDefined: (value: T) => any): any => {
+            return ifDefined(self.value);
+        };
+    }
+
+    get or() {
+        const self = this;
+        return () => self;
+    }
+}
+
+class NoneInstance implements None {
+    get value(): undefined {
+        return undefined;
+    }
+
+    get isDefined(): false {
+        return false;
+    }
+
+    match<R>(ifDefined: (value: never) => R, ifUndefined: () => R): R;
+    match<R>(ifDefined: (value: never) => R, ifUndefined?: () => R): undefined;
+    match<R>(
+        _ifDefined: (value: never) => R,
+        ifUndefined?: () => R
+    ): R | undefined {
+        return ifUndefined?.();
+    }
+
+    or<O>(alternative: O | (() => O)): Some<O> {
+        if (alternative instanceof Function) {
+            return Some(alternative());
+        } else {
+            return Some(alternative);
+        }
+    }
+}
+
+export function Some<T>(value: T): Some<T> {
+    return new SomeInstance(value);
+}
+
+export function None<T = any>(): None<T> {
+    return new NoneInstance();
+}
